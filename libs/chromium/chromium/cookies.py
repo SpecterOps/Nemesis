@@ -138,7 +138,9 @@ async def _insert_cookies(
             value_dec = None
             if masterkey_guid and dpapi_manager:
                 try:
-                    value_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(encrypted_value))
+                    value_dec_bytes = await dpapi_manager.decrypt_blob(
+                        Blob.from_bytes(encrypted_value), project=file_enriched.project
+                    )
                     if value_dec_bytes:
                         value_dec = value_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
@@ -150,7 +152,9 @@ async def _insert_cookies(
             if encryption_type in ["key", "abe"]:
                 # Try primary approach: get state key based on username/browser
                 if username:  # Only try primary approach if username was extracted
-                    state_key_id = await get_state_key_id(file_enriched.source, username, browser, asyncpg_pool)
+                    state_key_id = await get_state_key_id(
+                        file_enriched.source, username, browser, asyncpg_pool, project=file_enriched.project
+                    )
                     if state_key_id:
                         # Retrieve the pre-processed state key for decryption
                         state_key_bytes = await get_state_key_bytes(state_key_id, encryption_type, asyncpg_pool)
@@ -189,7 +193,11 @@ async def _insert_cookies(
                         encryption_type=encryption_type,
                     )
                     backup_decrypted_bytes, backup_state_key_id = await try_decrypt_with_all_keys(
-                        encrypted_value, file_enriched.source, encryption_type, asyncpg_pool
+                        encrypted_value,
+                        file_enriched.source,
+                        encryption_type,
+                        asyncpg_pool,
+                        project=file_enriched.project,
                     )
                     if backup_decrypted_bytes and backup_state_key_id:
                         # Apply the same offset handling as above
@@ -248,7 +256,7 @@ async def _insert_cookies(
                  source_port, encryption_type, masterkey_guid, state_key_id,
                  is_decrypted, value_enc, value_dec)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-                ON CONFLICT (source, username, browser, host_key, name, path)
+                ON CONFLICT (project, source, username, browser, host_key, name, path)
                 DO UPDATE SET
                     host_key = EXCLUDED.host_key,
                     name = EXCLUDED.name,

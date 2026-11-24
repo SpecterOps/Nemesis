@@ -613,7 +613,7 @@ class TestDomainBackupKey:
         )
 
         manager = DpapiManager(storage_backend="memory", auto_decrypt=True)
-        await manager.upsert_domain_backup_key(backup_key)
+        await manager.upsert_domain_backup_key(backup_key, project="proj-a")
 
         await manager.upsert_masterkey(
             MasterKey(
@@ -621,12 +621,13 @@ class TestDomainBackupKey:
                 masterkey_type=MasterKeyType.UNKNOWN,
                 plaintext_key=decrypted_masterkey.plaintext_key,
                 plaintext_key_sha1=decrypted_masterkey.plaintext_key_sha1,
-            )
+            ),
+            project="proj-a",
         )
 
         assert blob.masterkey_guid == masterkey_file.masterkey_guid
 
-        decrypted = await manager.decrypt_blob(blob)
+        decrypted = await manager.decrypt_blob(blob, project="proj-a")
         assert decrypted == b"This is a test."  # Adjusted expected value
 
     def test_decrypt_masterkey_file_no_domain_key(self):

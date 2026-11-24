@@ -218,10 +218,12 @@ class DPAPIMasterkeyAnalyzer(EnrichmentModule):
             )
 
             # The DPAPI manager handles all decryption automatically
-            await self.dpapi_manager.upsert_masterkey(mk)
+            await self.dpapi_manager.upsert_masterkey(mk, project=file_enriched.project)
 
             # Check if it was decrypted
-            stored_mks = await self.dpapi_manager.get_masterkeys(guid=masterkey_file.masterkey_guid)
+            stored_mks = await self.dpapi_manager.get_masterkeys(
+                guid=masterkey_file.masterkey_guid, project=file_enriched.project
+            )
             was_decrypted = len(stored_mks) > 0 and stored_mks[0].is_decrypted
 
             if was_decrypted:

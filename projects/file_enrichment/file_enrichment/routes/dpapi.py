@@ -68,8 +68,11 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                 masterkey_guid=evnt.masterkey_guid,
             )
 
+            # Everything below stays within the masterkey's project
+            project = evnt.project
+
             # Get the masterkey to check its type
-            masterkeys = await self.dpapi_manager.get_masterkeys(guid=evnt.masterkey_guid)
+            masterkeys = await self.dpapi_manager.get_masterkeys(guid=evnt.masterkey_guid, project=project)
             masterkey_type = masterkeys[0].masterkey_type.value if masterkeys else None
 
             # Try to decrypt chrome_keys with this masterkey
@@ -79,6 +82,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                 self.dpapi_manager,
                 global_vars.asyncpg_pool,
                 masterkey_type,
+                project=project,
             )
 
             logger.debug(
@@ -94,6 +98,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                 self.dpapi_manager,
                 global_vars.asyncpg_pool,
                 masterkey_type,
+                project=project,
             )
 
             logger.debug(
@@ -110,6 +115,7 @@ class PlaintextMasterKeyMonitor(DpapiObserver):
                     self.dpapi_manager,
                     global_vars.asyncpg_pool,
                     masterkey_type,
+                    project=project,
                 )
 
                 logger.debug(
@@ -181,18 +187,27 @@ async def dpapi_background_monitor(dpapi_manager: DpapiManager) -> None:
     logger.info("Entering DPAPI background monitor loop")
     while True:
         try:
-            num_masterkeys = await dpapi_manager.get_masterkeys()
-            num_dec_masterkeys = len([mk for mk in num_masterkeys if mk.is_decrypted])
-            num_enc_masterkeys = len([mk for mk in num_masterkeys if not mk.is_decrypted])
-            backupkeys = await dpapi_manager.get_backup_keys()
-            num_system_creds = await dpapi_manager.get_system_credentials()
+            # Counts only, across all projects (key material is never read here)
+            assert global_vars.asyncpg_pool is not None
+            async with global_vars.asyncpg_pool.acquire() as conn:
+                counts = await conn.fetchrow(
+                    """
+                    SELECT
+                        (SELECT count(*) FROM dpapi.masterkeys) AS total_mks,
+                        (SELECT count(*) FROM dpapi.masterkeys WHERE plaintext_key_sha1 IS NULL) AS num_enc_mks,
+                        (SELECT count(*) FROM dpapi.domain_backup_keys) AS num_backup_keys,
+                        (SELECT count(*) FROM dpapi.system_credentials) AS num_system_creds,
+                        (SELECT count(DISTINCT project) FROM dpapi.masterkeys) AS num_projects
+                    """
+                )
             logger.debug(
                 "Background DPAPI loop tick",
-                total_mks=len(num_masterkeys),
-                num_enc_mks=num_enc_masterkeys,
-                num_dec_mks=num_dec_masterkeys,
-                num_backup_keys=len(backupkeys),
-                num_system_creds=len(num_system_creds),
+                total_mks=counts["total_mks"],
+                num_enc_mks=counts["num_enc_mks"],
+                num_dec_mks=counts["total_mks"] - counts["num_enc_mks"],
+                num_backup_keys=counts["num_backup_keys"],
+                num_system_creds=counts["num_system_creds"],
+                num_projects=counts["num_projects"],
             )
         except Exception as e:
             logger.exception("Error in DPAPI background monitor", error=str(e))
@@ -213,7 +228,12 @@ async def submit_dpapi_credential(
     """Submit DPAPI credential for masterkey decryption."""
     try:
         has_user_sid = hasattr(request, "user_sid")
-        logger.info("Received DPAPI credential submission", credential_type=request.type, has_user_sid=has_user_sid)
+        logger.info(
+            "Received DPAPI credential submission",
+            credential_type=request.type,
+            has_user_sid=has_user_sid,
+            project=request.project,
+        )
 
         try:
             if isinstance(request, DomainBackupKeyCredential):
@@ -267,7 +287,7 @@ async def _handle_domain_backup_key_credential(
         key_data=pvk_data,
         domain_controller=backup_key.domain_controller,
     )
-    backup_key_id = await dpapi_manager.upsert_domain_backup_key(backup_key_obj)
+    backup_key_id = await dpapi_manager.upsert_domain_backup_key(backup_key_obj, project=backup_key.project)
     return {"status": "success", "type": "domain_backup_key", "id": backup_key_id}
 
 
@@ -284,7 +304,7 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
         masterkey_data = bytes.fromhex(master_key_data.key_hex)
 
         # Check if masterkey already exists
-        existing_masterkeys = await dpapi_manager.get_masterkeys(guid=masterkey_guid)
+        existing_masterkeys = await dpapi_manager.get_masterkeys(guid=masterkey_guid, project=request.project)
         if existing_masterkeys and existing_masterkeys[0].is_decrypted:
             logger.info(f"Master key {masterkey_guid} already exists, skipping")
             existing_guids.append(str(masterkey_guid))
@@ -296,7 +316,7 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
                 masterkey_type=MasterKeyType.UNKNOWN,
                 plaintext_key_sha1=masterkey_data,
             )
-            await dpapi_manager.upsert_masterkey(masterkey)
+            await dpapi_manager.upsert_masterkey(masterkey, project=request.project)
             processed_guids.append(str(masterkey_guid))
         elif len(masterkey_data) == 64:
             masterkey = MasterKey(
@@ -305,7 +325,7 @@ async def _handle_master_key_guid_pairs(dpapi_manager: DpapiManager, request: Ma
                 plaintext_key=masterkey_data,
                 plaintext_key_sha1=SHA1.new(masterkey_data).digest(),
             )
-            await dpapi_manager.upsert_masterkey(masterkey)
+            await dpapi_manager.upsert_masterkey(masterkey, project=request.project)
             processed_guids.append(str(masterkey_guid))
         else:
             logger.warning(
@@ -325,7 +345,7 @@ async def _handle_dpapi_system_credential(dpapi_manager: DpapiManager, request: 
 
     dpapi_system_bytes = bytes.fromhex(request.value)
     dpapi_system_key = DpapiSystemCredential.from_bytes(dpapi_system_bytes)
-    await dpapi_manager.upsert_system_credential(dpapi_system_key)
+    await dpapi_manager.upsert_system_credential(dpapi_system_key, project=request.project)
 
     return {"status": "success", "type": "dpapi_system"}
 
@@ -382,7 +402,7 @@ async def _handle_chromium_app_bound_key(dpapi_manager: DpapiManager, request: C
                     None,  # originating_object_id
                     None,  # agent_id
                     source,
-                    None,  # project
+                    request.project,
                     try_username,
                     browser,
                     False,  # key_is_decrypted
@@ -413,7 +433,7 @@ async def _handle_chromium_app_bound_key(dpapi_manager: DpapiManager, request: C
             # Finally, try to decrypt chromium cookies and logins with newly submitted key
             assert global_vars.asyncpg_pool is not None
             chromium_data_result = await retry_decrypt_chromium_data(
-                UUID(int=0), dpapi_manager, global_vars.asyncpg_pool
+                UUID(int=0), dpapi_manager, global_vars.asyncpg_pool, project=request.project
             )
 
             logger.debug(
@@ -424,7 +444,7 @@ async def _handle_chromium_app_bound_key(dpapi_manager: DpapiManager, request: C
             return result
 
         except asyncpg.UniqueViolationError as e:
-            # Unique constraint violation on (source, username, browser)
+            # Unique constraint violation on (project, source, username, browser)
             if not is_default_username:
                 # If username is not the default "UNKNOWN", fail immediately
                 raise HTTPException(
@@ -481,5 +501,5 @@ async def _handle_password_based_credential(
     else:
         raise ValueError(f"Unsupported password-based credential type: {type(request)}")
 
-    result = await decryptor.process_password_based_credential(c, request.user_sid)
+    result = await decryptor.process_password_based_credential(c, request.user_sid, project=request.project)
     return result

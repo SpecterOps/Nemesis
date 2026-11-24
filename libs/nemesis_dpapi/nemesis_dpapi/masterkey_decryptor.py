@@ -6,7 +6,7 @@ from common.logger import get_logger
 from .core import MasterKeyType
 from .exceptions import MasterKeyDecryptionError
 from .keys import CredKey, CredKeyHashType, MasterKeyEncryptionKey, NtlmHash, Password, Pbkdf2Hash, Sha1Hash
-from .manager import DpapiManager, EncryptionFilter
+from .manager import DpapiManager, EncryptionFilter, require_project
 from .types import Sid
 
 logger = get_logger(__name__)
@@ -23,12 +23,14 @@ class MasterKeyDecryptorService:
         self,
         credential: Password | NtlmHash | Sha1Hash | Pbkdf2Hash,
         account_sid: Sid,
+        *,
+        project: str,
     ) -> dict:
-        """Handle password, NTLM hash, and cred key credential submissions."""
-
+        """Handle password, NTLM hash, and cred key credential submissions for one project's masterkeys."""
+        require_project(project)
         mk_keys_to_try = self._generate_mk_encryption_keys(credential, account_sid)
 
-        task = asyncio.create_task(self._decrypt_masterkeys_background(mk_keys_to_try, type(credential)))
+        task = asyncio.create_task(self._decrypt_masterkeys_background(mk_keys_to_try, type(credential), project))
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
 
@@ -39,7 +41,7 @@ class MasterKeyDecryptorService:
         }
 
     async def _decrypt_masterkeys_background(
-        self, mk_keys_to_try: list[MasterKeyEncryptionKey], credential_type: type
+        self, mk_keys_to_try: list[MasterKeyEncryptionKey], credential_type: type, project: str
     ) -> None:
         """Perform master key decryption attempts in background."""
         start_time = perf_counter()
@@ -47,6 +49,7 @@ class MasterKeyDecryptorService:
             logger.info(f"Starting background decryption for credential type: {credential_type.__name__}")
 
             encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
+                project=project,
                 encryption_filter=EncryptionFilter.ENCRYPTED_ONLY,
                 masterkey_type=[MasterKeyType.USER, MasterKeyType.UNKNOWN],
             )
@@ -61,7 +64,7 @@ class MasterKeyDecryptorService:
                 for mk_key in mk_keys_to_try:
                     try:
                         plaintext_mk = masterkey.decrypt(mk_key)
-                        await self.dpapi_manager.upsert_masterkey(plaintext_mk)
+                        await self.dpapi_manager.upsert_masterkey(plaintext_mk, project=project)
                         decrypted_count += 1
                         logger.info(
                             f"Successfully decrypted master key {masterkey.guid} with {credential_type.__name__}"

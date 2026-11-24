@@ -94,7 +94,7 @@ async def _insert_history_urls(
                 (originating_object_id, agent_id, source, project, username, browser,
                  url, title, visit_count, last_visit_time)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                ON CONFLICT (source, username, browser, url, title, last_visit_time)
+                ON CONFLICT (project, source, username, browser, url, title, last_visit_time)
                 DO UPDATE SET
                     url = EXCLUDED.url,
                     title = EXCLUDED.title,
@@ -150,7 +150,7 @@ async def _insert_history_downloads(
                 (originating_object_id, agent_id, source, project, username, browser,
                  url, download_path, start_time, end_time, total_bytes)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                ON CONFLICT (source, username, browser, url, download_path, start_time)
+                ON CONFLICT (project, source, username, browser, url, download_path, start_time)
                 DO UPDATE SET
                     url = EXCLUDED.url,
                     download_path = EXCLUDED.download_path,

@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { ChevronDown, Send, CheckCircle, XCircle } from 'lucide-react';
+import { useUser } from '@/contexts/UserContext';
 
 const DpapiSubmitCredential = () => {
+  // DPAPI credentials are scoped to a project; default to the user's current project like file uploads do.
+  // Until the user edits the field, it follows the current project.
+  const { project: contextProject } = useUser();
+  const [projectOverride, setProject] = useState(/** @type {string | null} */ (null));
+  const project = projectOverride ?? (contextProject || '');
   const [credentialType, setCredentialType] = useState('password');
   const [credentialValue, setCredentialValue] = useState('');
   const [userSid, setUserSid] = useState('');
@@ -153,6 +159,11 @@ const DpapiSubmitCredential = () => {
       }
     }
 
+    if (!project.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a Project' });
+      return;
+    }
+
     if (requiresUserSid && !userSid.trim()) {
       setMessage({ type: 'error', text: 'Please enter a User SID' });
       return;
@@ -174,6 +185,7 @@ const DpapiSubmitCredential = () => {
         },
         body: JSON.stringify({
           type: selectedType.apiType,
+          project: project.trim(),
           ...(isStructuredValue ? {
             value: masterKeyData.split('\n')
               .filter(line => line.trim())
@@ -313,6 +325,25 @@ const DpapiSubmitCredential = () => {
               {selectedType.description}
             </p>
           )}
+
+          {/* Project Input - every credential is stored for, and only decrypts data in, one project */}
+          <div>
+            <label htmlFor="dpapi-project" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Project
+            </label>
+            <input
+              type="text"
+              id="dpapi-project"
+              value={project}
+              onChange={(e) => setProject(e.target.value)}
+              placeholder="Enter project name (e.g. ASSESS-123)"
+              className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-dark-secondary rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              required
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              The credential only decrypts master keys and data from this project.
+            </p>
+          </div>
 
           {/* User SID Input - Only for password, ntlm_hash, cred_key */}
           {requiresUserSid && (
@@ -473,6 +504,7 @@ const DpapiSubmitCredential = () => {
               type="submit"
               disabled={
                 isSubmitting ||
+                !project.trim() ||
                 (isStructuredValue ? !masterKeyData.trim() : !credentialValue.trim()) ||
                 (requiresUserSid && !userSid.trim()) ||
                 (requiresGuid && !guid.trim()) ||

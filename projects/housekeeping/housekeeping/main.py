@@ -332,12 +332,13 @@ async def delete_expired_file_linkings(expiration_date: datetime | None = None) 
 
 async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> bool:
     """
-    Delete DPAPI masterkeys, domain backup keys and system credentials once no unexpired files remain.
+    Delete a project's DPAPI masterkeys, domain backup keys and system credentials once it has no unexpired files.
 
-    These tables record neither a source, a project nor the file a key came from, and keys from one upload decrypt
-    blobs from others, so they cannot expire per file. They are kept while any file is still within its retention
-    and deleted (rows last updated before the comparison date) once every file has expired. (A created_at < now()
-    rule would delete every key on each nightly run while their files are still being analysed.)
+    DPAPI rows are scoped to a project but record neither a source nor the file a key came from, and keys from one
+    upload decrypt blobs from other uploads of the same project, so they cannot expire per file. A project's keys are
+    kept while any of its files is still within its retention, and deleted (rows last updated before the comparison
+    date) once all of them have expired. (A created_at < now() rule would delete every key on each nightly run while
+    their files are still being analysed.)
 
     Args:
         expiration_date: Optional date to use for comparison instead of current datetime.
@@ -356,19 +357,23 @@ async def delete_expired_dpapi_data(expiration_date: datetime | None = None) -> 
             # Delete all dpapi tables in a transaction
             async with conn.transaction():
                 if expiration_date != datetime.max:
-                    live_files = await conn.fetchval(
-                        """
-                        SELECT EXISTS (SELECT 1 FROM files WHERE expiration >= $1)
-                            OR EXISTS (SELECT 1 FROM files_enriched WHERE expiration >= $1)
-                        """,
-                        comparison_date,
-                    )
-                    if live_files:
-                        logger.info("Keeping DPAPI data - unexpired files remain")
-                        return True
                     for table in ("dpapi.masterkeys", "dpapi.domain_backup_keys", "dpapi.system_credentials"):
-                        await conn.execute(f"DELETE FROM {table} WHERE updated_at < $1", comparison_date)
-                    logger.info("Deleted DPAPI data - no unexpired files remain")
+                        result = await conn.execute(
+                            f"""
+                            DELETE FROM {table} d
+                            WHERE d.updated_at < $1
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM files f WHERE f.project = d.project AND f.expiration >= $1
+                              )
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM files_enriched fe WHERE fe.project = d.project AND fe.expiration >= $1
+                              )
+                            """,
+                            comparison_date,
+                        )
+                        logger.info(
+                            "Deleted DPAPI data of projects with no unexpired files", table=table, result=result
+                        )
                 else:
                     # Delete all records from dpapi tables
                     await conn.execute("DELETE FROM dpapi.masterkeys")

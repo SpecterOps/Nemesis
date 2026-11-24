@@ -368,14 +368,16 @@ def get_source_report_data(
             )
             cookies_row = cur.fetchone() or (0, 0)
 
-            # DPAPI masterkeys (not source-specific in current schema)
+            # DPAPI masterkeys have a project but no source: count the keys of the projects this source has files in
             cur.execute(
                 """
                 SELECT
                     COUNT(*) as total_keys,
                     COUNT(CASE WHEN plaintext_key IS NOT NULL THEN 1 END) as decrypted_keys
                 FROM dpapi.masterkeys
+                WHERE project IN (SELECT DISTINCT project FROM files_enriched WHERE UPPER(source) = %s)
             """,
+                [source_name_upper],
             )
             dpapi_row = cur.fetchone() or (0, 0)
 

@@ -85,12 +85,13 @@ class LsassDumpParser(EnrichmentModule):
             return value
 
     async def _parse_lsass_dump(
-        self, dump_file_path: str, target_hostname: str = "unknown"
+        self, dump_file_path: str, target_hostname: str = "unknown", *, project: str
     ) -> tuple[list, list, list, list]:
         """
         Parse LSASS dump file using pypykatz
         :param dump_file_path: Path to the dump file
         :param target_hostname: Target hostname for credential tracking
+        :param project: Project of the dump; extracted masterkeys are stored for this project only
         :return: Tuple of (logon_sessions, credentials, tickets, masterkeys)
         """
         logon_sessions = []
@@ -252,7 +253,7 @@ class LsassDumpParser(EnrichmentModule):
                             # add this masterkey to the DPAPI cache
                             if self.dpapi_manager:
                                 try:
-                                    await self.dpapi_manager.upsert_masterkey(mk)
+                                    await self.dpapi_manager.upsert_masterkey(mk, project=project)
                                     logger.info(
                                         "Inserted masterkey from lsass dump into DPAPI manager",
                                         masterkey_guid=cred.key_guid,
@@ -431,7 +432,7 @@ class LsassDumpParser(EnrichmentModule):
 
         # Parse the LSASS dump
         logon_sessions, credentials, tickets, masterkeys = await self._parse_lsass_dump(
-            file_path, file_enriched.file_name
+            file_path, file_enriched.file_name, project=file_enriched.project
         )
 
         if not len(logon_sessions):

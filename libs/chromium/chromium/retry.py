@@ -12,9 +12,14 @@ logger = get_logger(__name__)
 
 
 async def retry_decrypt_chromium_data(
-    masterkey_guid: UUID, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool, masterkey_type: str | None = None
+    masterkey_guid: UUID,
+    dpapi_manager: DpapiManager,
+    asyncpg_pool: asyncpg.Pool,
+    masterkey_type: str | None = None,
+    *,
+    project: str,
 ) -> dict:
-    """Retry decrypting cookies and logins that failed to decrypt previously.
+    """Retry decrypting one project's cookies and logins that failed to decrypt previously.
 
     When a new masterkey becomes available, this function:
     1. Retries DPAPI-encrypted cookies/logins that use this masterkey
@@ -25,6 +30,7 @@ async def retry_decrypt_chromium_data(
         dpapi_manager: DpapiManager instance for decryption
         asyncpg_pool: Async Postgres connection pool
         masterkey_type: Optional masterkey type ('system', 'user', 'unknown')
+        project: Project the masterkey (or key) belongs to; only that project's rows are retried
 
     Returns:
         Dict with statistics: {
@@ -45,13 +51,13 @@ async def retry_decrypt_chromium_data(
 
     try:
         # Retry cookies
-        cookies_result = await _retry_decrypt_cookies(masterkey_guid, dpapi_manager, asyncpg_pool)
+        cookies_result = await _retry_decrypt_cookies(masterkey_guid, dpapi_manager, asyncpg_pool, project=project)
         result["cookies_attempted"] = cookies_result["attempted"]
         result["cookies_decrypted"] = cookies_result["decrypted"]
         result["errors"].extend(cookies_result["errors"])
 
         # Retry logins
-        logins_result = await _retry_decrypt_logins(masterkey_guid, dpapi_manager, asyncpg_pool)
+        logins_result = await _retry_decrypt_logins(masterkey_guid, dpapi_manager, asyncpg_pool, project=project)
         result["logins_attempted"] = logins_result["attempted"]
         result["logins_decrypted"] = logins_result["decrypted"]
         result["errors"].extend(logins_result["errors"])
@@ -75,7 +81,7 @@ async def retry_decrypt_chromium_data(
 
 
 async def retry_decrypt_chromium_data_for_state_key(
-    source: str, username: str | None, browser: str | None, asyncpg_pool: asyncpg.Pool
+    source: str, username: str | None, browser: str | None, asyncpg_pool: asyncpg.Pool, *, project: str | None
 ) -> dict:
     """Decrypt pending key/abe cookies and logins for one source, username and browser.
 
@@ -94,12 +100,12 @@ async def retry_decrypt_chromium_data_for_state_key(
         return result
     scope = (source, username, browser)
     try:
-        cookies_result = await _retry_decrypt_cookies(None, None, asyncpg_pool, state_key_scope=scope)
+        cookies_result = await _retry_decrypt_cookies(None, None, asyncpg_pool, project=project, state_key_scope=scope)
         result["cookies_attempted"] = cookies_result["attempted"]
         result["cookies_decrypted"] = cookies_result["decrypted"]
         result["errors"].extend(cookies_result["errors"])
 
-        logins_result = await _retry_decrypt_logins(None, None, asyncpg_pool, state_key_scope=scope)
+        logins_result = await _retry_decrypt_logins(None, None, asyncpg_pool, project=project, state_key_scope=scope)
         result["logins_attempted"] = logins_result["attempted"]
         result["logins_decrypted"] = logins_result["decrypted"]
         result["errors"].extend(logins_result["errors"])
@@ -119,18 +125,23 @@ async def retry_decrypt_chromium_data_for_state_key(
 
 
 def _pending_rows_query(table: str, value_column: str, state_key_scope: tuple | None) -> str:
-    """Undecrypted rows to retry: DPAPI rows for a masterkey plus all key/abe rows, or only one profile's key/abe rows."""
+    """Undecrypted rows of one project to retry: DPAPI rows for a masterkey plus all key/abe rows, or only one
+    profile's key/abe rows. Parameters: ``(masterkey_guid, project)`` or ``(source, username, browser, project)``."""
     select = f"""
             SELECT id, encryption_type, masterkey_guid, state_key_id,
-                   {value_column}, source, username, browser
+                   {value_column}, project, source, username, browser
             FROM chromium.{table}
             WHERE is_decrypted = FALSE
     """
     if state_key_scope is not None:
-        return select + "AND encryption_type IN ('key', 'abe') AND source = $1 AND username = $2 AND browser = $3"
+        return select + (
+            "AND encryption_type IN ('key', 'abe') AND source = $1 AND username = $2 AND browser = $3 "
+            "AND project IS NOT DISTINCT FROM $4"
+        )
     return (
         select
-        + """AND (
+        + """AND project = $2
+            AND (
                 (encryption_type = 'dpapi' AND masterkey_guid = $1)
                 OR encryption_type IN ('key', 'abe')
             )"""
@@ -142,6 +153,7 @@ async def _retry_decrypt_cookies(
     dpapi_manager: DpapiManager | None,
     asyncpg_pool: asyncpg.Pool,
     *,
+    project: str | None,
     state_key_scope: tuple[str, str, str] | None = None,
 ) -> dict:
     """Retry decrypting cookies that previously failed.
@@ -159,7 +171,7 @@ async def _retry_decrypt_cookies(
     # Find all undecrypted cookies
     # For DPAPI: only those matching this masterkey
     # For key/abe: all undecrypted (state keys may now be available)
-    params = state_key_scope if state_key_scope is not None else (str(masterkey_guid),)
+    params = (*state_key_scope, project) if state_key_scope is not None else (str(masterkey_guid), project)
     async with asyncpg_pool.acquire() as conn:
         cookies = await conn.fetch(_pending_rows_query("cookies", "value_enc", state_key_scope), *params)
 
@@ -177,6 +189,7 @@ async def _retry_decrypt_cookies(
         state_key_id = cookie["state_key_id"]
         value_enc = cookie["value_enc"]
         source = cookie["source"]
+        row_project = cookie["project"]
         username = cookie["username"]
         browser = cookie["browser"]
 
@@ -185,9 +198,14 @@ async def _retry_decrypt_cookies(
             decrypted = False
 
             # Try DPAPI decryption
-            if encryption_type == "dpapi" and cookie_masterkey_guid == str(masterkey_guid):
+            if (
+                encryption_type == "dpapi"
+                and dpapi_manager is not None
+                and project
+                and cookie_masterkey_guid == str(masterkey_guid)
+            ):
                 try:
-                    value_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(value_enc))
+                    value_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(value_enc), project=project)
                     if value_dec_bytes:
                         value_dec = value_dec_bytes.decode("utf-8", errors="replace")
                         decrypted = True
@@ -238,7 +256,7 @@ async def _retry_decrypt_cookies(
                             state_key_row = await conn.fetchrow(
                                 """
                                 SELECT id FROM chromium.state_keys
-                                WHERE source = $1 AND username = $2 AND browser = $3
+                                WHERE project IS NOT DISTINCT FROM $6 AND source = $1 AND username = $2 AND browser = $3
                                 AND (
                                     (key_is_decrypted = TRUE AND $4 = 'key')
                                     OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
@@ -249,6 +267,7 @@ async def _retry_decrypt_cookies(
                                 browser,
                                 encryption_type,
                                 encryption_type,
+                                row_project,
                             )
                             if state_key_row:
                                 new_state_key_id = state_key_row["id"]
@@ -314,6 +333,7 @@ async def _retry_decrypt_logins(
     dpapi_manager: DpapiManager | None,
     asyncpg_pool: asyncpg.Pool,
     *,
+    project: str | None,
     state_key_scope: tuple[str, str, str] | None = None,
 ) -> dict:
     """Retry decrypting logins that previously failed.
@@ -329,7 +349,7 @@ async def _retry_decrypt_logins(
     result = {"attempted": 0, "decrypted": 0, "errors": []}
 
     # Find all undecrypted logins
-    params = state_key_scope if state_key_scope is not None else (str(masterkey_guid),)
+    params = (*state_key_scope, project) if state_key_scope is not None else (str(masterkey_guid), project)
     async with asyncpg_pool.acquire() as conn:
         logins = await conn.fetch(_pending_rows_query("logins", "password_value_enc", state_key_scope), *params)
 
@@ -347,6 +367,7 @@ async def _retry_decrypt_logins(
         state_key_id = login["state_key_id"]
         password_value_enc = login["password_value_enc"]
         source = login["source"]
+        row_project = login["project"]
         username = login["username"]
         browser = login["browser"]
 
@@ -355,9 +376,16 @@ async def _retry_decrypt_logins(
             decrypted = False
 
             # Try DPAPI decryption
-            if encryption_type == "dpapi" and login_masterkey_guid == str(masterkey_guid):
+            if (
+                encryption_type == "dpapi"
+                and dpapi_manager is not None
+                and project
+                and login_masterkey_guid == str(masterkey_guid)
+            ):
                 try:
-                    password_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(password_value_enc))
+                    password_dec_bytes = await dpapi_manager.decrypt_blob(
+                        Blob.from_bytes(password_value_enc), project=project
+                    )
                     if password_dec_bytes:
                         password_dec = password_dec_bytes.decode("utf-8", errors="replace")
                         decrypted = True
@@ -410,7 +438,7 @@ async def _retry_decrypt_logins(
                                 state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE source = $1 AND username = $2 AND browser = $3
+                                    WHERE project IS NOT DISTINCT FROM $6 AND source = $1 AND username = $2 AND browser = $3
                                     AND (
                                         (key_is_decrypted = TRUE AND $4 = 'key')
                                         OR (app_bound_key_is_decrypted = TRUE AND $5 = 'abe')
@@ -421,13 +449,14 @@ async def _retry_decrypt_logins(
                                     browser,
                                     encryption_type,
                                     encryption_type,
+                                    row_project,
                                 )
                             else:
                                 # if no username/password, just restrict to SOURCE
                                 state_key_row = await conn.fetchrow(
                                     """
                                     SELECT id FROM chromium.state_keys
-                                    WHERE source = $1
+                                    WHERE project IS NOT DISTINCT FROM $4 AND source = $1
                                     AND (
                                         (key_is_decrypted = TRUE AND $2 = 'key')
                                         OR (app_bound_key_is_decrypted = TRUE AND $3 = 'abe')
@@ -436,6 +465,7 @@ async def _retry_decrypt_logins(
                                     source,
                                     encryption_type,
                                     encryption_type,
+                                    row_project,
                                 )
                             if state_key_row:
                                 new_state_key_id = state_key_row["id"]

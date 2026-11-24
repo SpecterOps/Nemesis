@@ -24,6 +24,7 @@ logger = getLogger(__name__)
 class NewEncryptedMasterKeyEvent(BaseModel):
     """Event emitted when a new encrypted master key is added"""
 
+    project: str
     masterkey_guid: UUID
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -31,6 +32,7 @@ class NewEncryptedMasterKeyEvent(BaseModel):
 class NewPlaintextMasterKeyEvent(BaseModel):
     """Event emitted when a new plaintext master key is added"""
 
+    project: str
     masterkey_guid: UUID
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -38,6 +40,7 @@ class NewPlaintextMasterKeyEvent(BaseModel):
 class NewDomainBackupKeyEvent(BaseModel):
     """Event emitted when a new domain backup key is added"""
 
+    project: str
     backup_key_guid: UUID
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -45,6 +48,7 @@ class NewDomainBackupKeyEvent(BaseModel):
 class NewDpapiSystemCredentialEvent(BaseModel):
     """Event emitted when a new DPAPI system credential is added"""
 
+    project: str
     credential: DpapiSystemCredential
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -53,6 +57,7 @@ class NewPasswordDerivedCredentialEvent(BaseModel):
     """Event emitted when a new password-derived credential is added. This includes
     Password, NTLM hash, SHA1 hash, and PBKDF2 hash credentials."""
 
+    project: str
     type: str
     credential: Password | NtlmHash | Sha1Hash | Pbkdf2Hash
     user_sid: Sid | None = None
@@ -85,7 +90,9 @@ subscription_started = False
 
 
 class TypedDpapiEvent(BaseModel):
-    """Wrapper class for DpapiEvent with type information for deserialization."""
+    """Wrapper class for DpapiEvent with type information for deserialization.
+
+    Every event carries the project its key material belongs to; observers must only act within that project."""
 
     type_name: str
     evnt: DpapiEvent

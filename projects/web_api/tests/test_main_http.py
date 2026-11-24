@@ -255,3 +255,20 @@ class TestWorkflowCompletion:
         response = client.post(COMPLETION_ROUTE, json=_completion_event(data))
         assert response.status_code == 200
         update.assert_called_once_with("c", file_size=0, increment_completed=False, increment_failed=True)
+
+
+class TestDpapiCredentials:
+    """DPAPI credentials are scoped to a project: it is required and forwarded to file-enrichment."""
+
+    BODY = {"type": "dpapi_system", "value": "ab" * 40}
+
+    def test_project_is_forwarded(self, client, http_mock):
+        http_mock.return_value = _response(json_body={"status": "success"})
+        response = client.post("/dpapi/credentials", json={**self.BODY, "project": "proj-a"})
+        assert response.status_code == 200
+        assert http_mock.await_args.kwargs["json_body"]["project"] == "proj-a"
+
+    @pytest.mark.parametrize("body", [BODY, {**BODY, "project": ""}, {**BODY, "project": "   "}])
+    def test_missing_or_blank_project_is_rejected(self, client, http_mock, body):
+        assert client.post("/dpapi/credentials", json=body).status_code == 422
+        http_mock.assert_not_awaited()

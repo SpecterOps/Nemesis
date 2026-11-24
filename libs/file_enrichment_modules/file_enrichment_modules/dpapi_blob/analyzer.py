@@ -133,7 +133,9 @@ rule has_dpapi_blob
                     # Calculate blob length from raw data
                     carved_blob["blob_length"] = len(dpapi_blob_raw) if dpapi_blob_raw else 0
 
-                    carved_blob_dec = await self.dpapi_manager.decrypt_blob(Blob.from_bytes(dpapi_blob_raw))
+                    carved_blob_dec = await self.dpapi_manager.decrypt_blob(
+                        Blob.from_bytes(dpapi_blob_raw), project=file_enriched.project
+                    )
 
                     if carved_blob_dec:
                         carved_blob["is_decrypted"] = True

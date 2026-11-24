@@ -1,4 +1,8 @@
-"""PostgreSQL storage backend implementations."""
+"""PostgreSQL storage backend implementations.
+
+Every table is scoped to a project: rows are written with the caller's project, uniqueness is per project, and every
+read filters on it, so key material from one project is never returned for another.
+"""
 
 from uuid import UUID
 
@@ -14,14 +18,26 @@ BACKUPKEYS_TABLE = "dpapi.domain_backup_keys"
 SYSTEMCREDS_TABLE = "dpapi.system_credentials"
 
 
+def _row_to_masterkey(row) -> MasterKey:
+    return MasterKey(
+        guid=row["guid"],
+        masterkey_type=MasterKeyType(row["masterkey_type"]) if row.get("masterkey_type") else MasterKeyType.UNKNOWN,
+        encrypted_key_usercred=row["encrypted_key_usercred"],
+        encrypted_key_backup=row["encrypted_key_backup"],
+        plaintext_key=row["plaintext_key"],
+        plaintext_key_sha1=row["plaintext_key_sha1"],
+        backup_key_guid=row["backup_key_guid"],
+    )
+
+
 class PostgresMasterKeyRepository:
     """PostgreSQL storage for masterkeys."""
 
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def upsert_masterkey(self, masterkey: MasterKey) -> None:
-        """Add or update a masterkey in storage with write-once semantics.
+    async def upsert_masterkey(self, masterkey: MasterKey, *, project: str) -> None:
+        """Add or update a project's masterkey with write-once semantics.
 
         Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
         it cannot be changed to a different value (including NULL).
@@ -32,10 +48,10 @@ class PostgresMasterKeyRepository:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 f"""
-                INSERT INTO {MASTKEYS_TABLE} (guid, encrypted_key_usercred, encrypted_key_backup,
+                INSERT INTO {MASTKEYS_TABLE} (project, guid, encrypted_key_usercred, encrypted_key_backup,
                                       plaintext_key, plaintext_key_sha1, backup_key_guid, masterkey_type)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (guid) DO UPDATE SET
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (project, guid) DO UPDATE SET
                     encrypted_key_usercred = EXCLUDED.encrypted_key_usercred,
                     encrypted_key_backup = EXCLUDED.encrypted_key_backup,
                     plaintext_key = EXCLUDED.plaintext_key,
@@ -62,6 +78,7 @@ class PostgresMasterKeyRepository:
                     AND ({MASTKEYS_TABLE}.masterkey_type IS NULL OR
                          {MASTKEYS_TABLE}.masterkey_type = EXCLUDED.masterkey_type)
                 """,
+                project,
                 str(masterkey.guid),
                 masterkey.encrypted_key_usercred,
                 masterkey.encrypted_key_backup,
@@ -80,14 +97,17 @@ class PostgresMasterKeyRepository:
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
+        *,
+        project: str,
         encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkey(s) with optional filtering.
+        """Retrieve a project's masterkey(s) with optional filtering.
 
         Args:
             guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
+            project: Only masterkeys stored for this project are returned.
             encryption_filter: Filter by decryption status (default: ALL). Ignored if guid is provided.
             backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
             masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
@@ -98,29 +118,14 @@ class PostgresMasterKeyRepository:
         async with self.pool.acquire() as conn:
             # If guid is provided, return single masterkey as a list
             if guid is not None:
-                query = f"SELECT * FROM {MASTKEYS_TABLE} WHERE guid = $1"
-                row = await conn.fetchrow(query, str(guid))
-                if not row:
-                    return []
-
-                mk = MasterKey(
-                    guid=row["guid"],
-                    masterkey_type=MasterKeyType(row["masterkey_type"])
-                    if row.get("masterkey_type")
-                    else MasterKeyType.UNKNOWN,
-                    encrypted_key_usercred=row["encrypted_key_usercred"],
-                    encrypted_key_backup=row["encrypted_key_backup"],
-                    plaintext_key=row["plaintext_key"],
-                    plaintext_key_sha1=row["plaintext_key_sha1"],
-                    backup_key_guid=row["backup_key_guid"],
+                row = await conn.fetchrow(
+                    f"SELECT * FROM {MASTKEYS_TABLE} WHERE project = $1 AND guid = $2", project, str(guid)
                 )
-                return [mk]
+                return [_row_to_masterkey(row)] if row else []
 
             # Otherwise, return filtered list
-            # Build query based on filters
-            query = f"SELECT * FROM {MASTKEYS_TABLE}"
-            params = []
-            conditions = []
+            params: list = [project]
+            conditions = ["project = $1"]
 
             if backup_key_guid is not None:
                 conditions.append(f"backup_key_guid = ${len(params) + 1}")
@@ -131,24 +136,8 @@ class PostgresMasterKeyRepository:
                 conditions.append(f"masterkey_type = ANY(${len(params) + 1})")
                 params.append([t.value for t in masterkey_type])
 
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
-
-            rows = await conn.fetch(query, *params)
-            masterkeys = [
-                MasterKey(
-                    guid=row["guid"],
-                    masterkey_type=MasterKeyType(row["masterkey_type"])
-                    if row.get("masterkey_type")
-                    else MasterKeyType.UNKNOWN,
-                    encrypted_key_usercred=row["encrypted_key_usercred"],
-                    encrypted_key_backup=row["encrypted_key_backup"],
-                    plaintext_key=row["plaintext_key"],
-                    plaintext_key_sha1=row["plaintext_key_sha1"],
-                    backup_key_guid=row["backup_key_guid"],
-                )
-                for row in rows
-            ]
+            rows = await conn.fetch(f"SELECT * FROM {MASTKEYS_TABLE} WHERE " + " AND ".join(conditions), *params)
+            masterkeys = [_row_to_masterkey(row) for row in rows]
 
             # Apply decryption filter in Python (could be optimized to SQL)
             if encryption_filter == EncryptionFilter.ENCRYPTED_ONLY:
@@ -158,12 +147,14 @@ class PostgresMasterKeyRepository:
 
             return masterkeys
 
-    async def delete_masterkey(self, guid: UUID) -> None:
-        """Delete a masterkey by GUID."""
+    async def delete_masterkey(self, guid: UUID, *, project: str) -> None:
+        """Delete a project's masterkey by GUID."""
         async with self.pool.acquire() as conn:
-            result = await conn.execute(f"DELETE FROM {MASTKEYS_TABLE} WHERE guid = $1", str(guid))
+            result = await conn.execute(
+                f"DELETE FROM {MASTKEYS_TABLE} WHERE project = $1 AND guid = $2", project, str(guid)
+            )
             if result == "DELETE 0":
-                raise StorageError(f"Masterkey {guid} not found")
+                raise StorageError(f"Masterkey {guid} not found in project {project!r}")
 
 
 class PostgresDomainBackupKeyRepository:
@@ -172,8 +163,8 @@ class PostgresDomainBackupKeyRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def upsert_backup_key(self, key: DomainBackupKey) -> int:
-        """Add or update a domain backup key in storage with write-once semantics.
+    async def upsert_backup_key(self, key: DomainBackupKey, *, project: str) -> int:
+        """Add or update a project's domain backup key with write-once semantics.
 
         Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
         it cannot be changed to a different value (including NULL).
@@ -187,9 +178,9 @@ class PostgresDomainBackupKeyRepository:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
                 f"""
-                INSERT INTO {BACKUPKEYS_TABLE} (guid, key_data, domain_controller)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (guid) DO UPDATE SET
+                INSERT INTO {BACKUPKEYS_TABLE} (project, guid, key_data, domain_controller)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (project, guid) DO UPDATE SET
                     key_data = EXCLUDED.key_data,
                     domain_controller = EXCLUDED.domain_controller
                 WHERE
@@ -205,37 +196,43 @@ class PostgresDomainBackupKeyRepository:
                          {BACKUPKEYS_TABLE}.domain_controller = EXCLUDED.domain_controller)
                 RETURNING id
                 """,
+                project,
                 str(key.guid),
                 key.key_data,
                 key.domain_controller,
             )
             return row["id"]
 
-    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
-        """Retrieve backup key(s).
+    async def get_backup_keys(self, guid: UUID | None = None, *, project: str) -> list[DomainBackupKey]:
+        """Retrieve a project's backup key(s).
 
         Args:
             guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
+            project: Only backup keys stored for this project are returned.
 
         Returns:
             A list of DomainBackupKey objects (empty list if no matches)
         """
         async with self.pool.acquire() as conn:
             if guid is not None:
-                row = await conn.fetchrow(f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
+                row = await conn.fetchrow(
+                    f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE project = $1 AND guid = $2", project, str(guid)
+                )
                 if not row:
                     return []
                 return [DomainBackupKey(guid=row["guid"], key_data=row["key_data"])]
 
-            rows = await conn.fetch(f"SELECT * FROM {BACKUPKEYS_TABLE}")
+            rows = await conn.fetch(f"SELECT * FROM {BACKUPKEYS_TABLE} WHERE project = $1", project)
             return [DomainBackupKey(guid=row["guid"], key_data=row["key_data"]) for row in rows]
 
-    async def delete_backup_key(self, guid: UUID) -> None:
-        """Delete a backup key by GUID."""
+    async def delete_backup_key(self, guid: UUID, *, project: str) -> None:
+        """Delete a project's backup key by GUID."""
         async with self.pool.acquire() as conn:
-            result = await conn.execute(f"DELETE FROM {BACKUPKEYS_TABLE} WHERE guid = $1", str(guid))
+            result = await conn.execute(
+                f"DELETE FROM {BACKUPKEYS_TABLE} WHERE project = $1 AND guid = $2", project, str(guid)
+            )
             if result == "DELETE 0":
-                raise StorageError(f"Domain backup key {guid} not found")
+                raise StorageError(f"Domain backup key {guid} not found in project {project!r}")
 
 
 class PostgresDpapiSystemCredentialRepository:
@@ -244,26 +241,27 @@ class PostgresDpapiSystemCredentialRepository:
     def __init__(self, connection_pool: asyncpg.Pool) -> None:
         self.pool = connection_pool
 
-    async def upsert_credential(self, cred: DpapiSystemCredential) -> None:
-        """Add or update a DPAPI system credential in storage."""
+    async def upsert_credential(self, cred: DpapiSystemCredential, *, project: str) -> None:
+        """Add or update a project's DPAPI system credential."""
         async with self.pool.acquire() as conn:
             await conn.execute(
                 f"""
-                INSERT INTO {SYSTEMCREDS_TABLE} (user_key, machine_key)
-                VALUES ($1, $2)
-                ON CONFLICT (user_key, machine_key) DO NOTHING
+                INSERT INTO {SYSTEMCREDS_TABLE} (project, user_key, machine_key)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (project, user_key, machine_key) DO NOTHING
                 """,
+                project,
                 cred.user_key,
                 cred.machine_key,
             )
 
-    async def get_all_credentials(self) -> list[DpapiSystemCredential]:
-        """Retrieve all DPAPI system credentials."""
+    async def get_all_credentials(self, *, project: str) -> list[DpapiSystemCredential]:
+        """Retrieve all of a project's DPAPI system credentials."""
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(f"SELECT * FROM {SYSTEMCREDS_TABLE}")
+            rows = await conn.fetch(f"SELECT * FROM {SYSTEMCREDS_TABLE} WHERE project = $1", project)
             return [DpapiSystemCredential(user_key=row["user_key"], machine_key=row["machine_key"]) for row in rows]
 
-    async def delete_all_credentials(self) -> None:
-        """Delete all DPAPI system credentials."""
+    async def delete_all_credentials(self, *, project: str) -> None:
+        """Delete all of a project's DPAPI system credentials."""
         async with self.pool.acquire() as conn:
-            await conn.execute(f"DELETE FROM {SYSTEMCREDS_TABLE}")
+            await conn.execute(f"DELETE FROM {SYSTEMCREDS_TABLE} WHERE project = $1", project)

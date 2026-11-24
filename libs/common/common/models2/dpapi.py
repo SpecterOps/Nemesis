@@ -10,6 +10,9 @@ from pydantic import BaseModel, Discriminator, Field, Tag, field_serializer, fie
 
 logger = get_logger(__name__)
 
+# Every DPAPI credential belongs to a project: it is stored for, and only decrypts data in, that project.
+ProjectField = Field(min_length=1, pattern=r"\S", description="Project the credential belongs to")
+
 
 class PasswordCredentialKey(BaseModel):
     """Use a plaintext password to derive a DPAPI credential key."""
@@ -17,6 +20,7 @@ class PasswordCredentialKey(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["password"]
+    project: str = ProjectField
     value: str  # Plain text password
     user_sid: Sid  # Required for to derive MK encryption keys
 
@@ -27,6 +31,7 @@ class NtlmHashCredentialKey(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["cred_key_ntlm"]
+    project: str = ProjectField
     value: str  # Hex string representation of NTLM hash (16 bytes)
     user_sid: Sid  # Required for to derive MK encryption keys
 
@@ -47,6 +52,7 @@ class Sha1CredentialKey(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["cred_key_sha1"]
+    project: str = ProjectField
     value: str  # Hex string representation of credential key (20 bytes)
     user_sid: Sid  # Required for to derive MK encryption keys
 
@@ -67,6 +73,7 @@ class Pbkdf2StrongCredentialKey(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["cred_key_pbkdf2"]
+    project: str = ProjectField
     value: str  # Hex string representation of credential key (16 bytes)
     user_sid: Sid  # Required to derive MK encryption keys
 
@@ -89,6 +96,7 @@ class DomainBackupKeyCredential(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["domain_backup_key"]
+    project: str = ProjectField
     value: str  # Base64 encoded PVK data
     guid: str  # Domain backup key GUID (UUID format)
     domain_controller: str | None = None  # Optional domain controller
@@ -123,6 +131,7 @@ class MasterKeyGuidPairList(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["master_key_guid_pair"]
+    project: str = ProjectField
     value: list[MasterKeyGuidPair]
 
 
@@ -132,6 +141,7 @@ class DpapiSystemCredentialRequest(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["dpapi_system"]
+    project: str = ProjectField
     value: str = Field(
         description="Hex-encoded DPAPI_SYSTEM LSA secret (40 bytes)",
         pattern=r"^[0-9a-fA-F]{80}$",
@@ -156,6 +166,7 @@ class ChromiumAppBoundKeyCredential(BaseModel):
     model_config = {"frozen": True, "extra": "forbid"}
 
     type: Literal["chromium_app_bound_key"]
+    project: str = ProjectField
     value: str  # Hex string or Python escaped format (\\x5f\\x1a...)
     source: str  # Required source identifier
     browser: Literal["chrome", "edge", "brave", "opera"] = "chrome"  # Browser type

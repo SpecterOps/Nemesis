@@ -799,7 +799,7 @@ CREATE TABLE IF NOT EXISTS chromium.history (
     last_visit_time TIMESTAMP WITH TIME ZONE,   -- extracted from the Chromium DB
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE (source, username, browser, url, title, last_visit_time)
+    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, url, title, last_visit_time)
 );
 
 -- "downloads" table in "History" file
@@ -819,7 +819,7 @@ CREATE TABLE IF NOT EXISTS chromium.downloads (
     total_bytes INTEGER,                        -- extracted from the Chromium DB
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE (source, username, browser, url, download_path, start_time)
+    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, url, download_path, start_time)
 );
 
 -- extracted from a Chromium "Local State" file
@@ -846,7 +846,7 @@ CREATE TABLE chromium.state_keys (
     app_bound_key_is_decrypted BOOLEAN,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE (source, username, browser)
+    UNIQUE NULLS NOT DISTINCT (project, source, username, browser)
 );
 
 -- AES keys extracted from a CNG "Google Chromekey1" CNG file from C:\ProgramData\Microsoft\Crypto\SystemKeys\
@@ -864,7 +864,7 @@ CREATE TABLE chromium.chrome_keys (
     key_is_decrypted BOOLEAN,
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
-    UNIQUE (key_masterkey_guid)
+    UNIQUE NULLS NOT DISTINCT (project, key_masterkey_guid)
 );
 
 -- Create indexes for masterkey GUID lookups on state_keys
@@ -899,7 +899,7 @@ CREATE TABLE IF NOT EXISTS chromium.logins (
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
     FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL,
-    UNIQUE (source, username, browser, origin_url, username_value)
+    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, origin_url, username_value)
 );
 
 -- "cookies" table in "Cookies" file
@@ -934,15 +934,17 @@ CREATE TABLE IF NOT EXISTS chromium.cookies (
 
     FOREIGN KEY (originating_object_id) REFERENCES files_enriched(object_id) ON DELETE CASCADE,
     FOREIGN KEY (state_key_id) REFERENCES chromium.state_keys(id) ON DELETE SET NULL,
-    UNIQUE (source, username, browser, host_key, name, path)
+    UNIQUE NULLS NOT DISTINCT (project, source, username, browser, host_key, name, path)
 );
 
 -- DPAPI tables
 CREATE SCHEMA dpapi;
 
+-- Every DPAPI table is scoped to a project: key material from one engagement never decrypts data in another.
 CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
     id SERIAL PRIMARY KEY,
-    guid TEXT UNIQUE NOT NULL,
+    project TEXT NOT NULL,
+    guid TEXT NOT NULL,
     encrypted_key_usercred BYTEA,
     encrypted_key_backup BYTEA,
     plaintext_key BYTEA,
@@ -950,26 +952,34 @@ CREATE TABLE IF NOT EXISTS dpapi.masterkeys (
     backup_key_guid TEXT,
     masterkey_type TEXT DEFAULT 'unknown',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, guid)
 );
 
 CREATE TABLE IF NOT EXISTS dpapi.domain_backup_keys (
     id SERIAL PRIMARY KEY,
-    guid TEXT UNIQUE NOT NULL,
+    project TEXT NOT NULL,
+    guid TEXT NOT NULL,
     key_data BYTEA NOT NULL,
     domain_controller TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, guid)
 );
 
 CREATE TABLE IF NOT EXISTS dpapi.system_credentials (
     id SERIAL PRIMARY KEY,
+    project TEXT NOT NULL,
     user_key BYTEA NOT NULL,
     machine_key BYTEA NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (user_key, machine_key)
+    UNIQUE (project, user_key, machine_key)
 );
+
+-- The (project, ...) unique constraints index project-first lookups; these cover the remaining filters.
+CREATE INDEX IF NOT EXISTS idx_dpapi_masterkeys_project_backup_key ON dpapi.masterkeys(project, backup_key_guid);
+CREATE INDEX IF NOT EXISTS idx_dpapi_masterkeys_project_type ON dpapi.masterkeys(project, masterkey_type);
 
 -- Create triggers for DPAPI tables
 CREATE OR REPLACE TRIGGER update_dpapi_masterkeys_updated_at

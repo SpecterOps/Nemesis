@@ -122,7 +122,9 @@ async def _insert_logins(
             # Try DPAPI decryption first
             if masterkey_guid and dpapi_manager:
                 try:
-                    password_dec_bytes = await dpapi_manager.decrypt_blob(Blob.from_bytes(password_value))
+                    password_dec_bytes = await dpapi_manager.decrypt_blob(
+                        Blob.from_bytes(password_value), project=file_enriched.project
+                    )
                     if password_dec_bytes:
                         password_value_dec = password_dec_bytes.decode("utf-8", errors="replace")
                         is_decrypted = True
@@ -134,7 +136,9 @@ async def _insert_logins(
             if encryption_type in ["key", "abe"]:
                 # Try primary approach: get state key based on username/browser
                 if username:  # Only try primary approach if username was extracted
-                    state_key_id = await get_state_key_id(file_enriched.source, username, browser, asyncpg_pool)
+                    state_key_id = await get_state_key_id(
+                        file_enriched.source, username, browser, asyncpg_pool, project=file_enriched.project
+                    )
                     if state_key_id:
                         # Retrieve the pre-processed state key for decryption
                         state_key_bytes = await get_state_key_bytes(state_key_id, encryption_type, asyncpg_pool)
@@ -171,7 +175,11 @@ async def _insert_logins(
                         encryption_type=encryption_type,
                     )
                     backup_decrypted_bytes, backup_state_key_id = await try_decrypt_with_all_keys(
-                        password_value, file_enriched.source, encryption_type, asyncpg_pool
+                        password_value,
+                        file_enriched.source,
+                        encryption_type,
+                        asyncpg_pool,
+                        project=file_enriched.project,
                     )
                     if backup_decrypted_bytes and backup_state_key_id:
                         # Apply the same offset handling as above
@@ -224,7 +232,7 @@ async def _insert_logins(
                  date_password_modified, times_used, encryption_type, masterkey_guid,
                  state_key_id, is_decrypted, password_value_enc, password_value_dec)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-                ON CONFLICT (source, username, browser, origin_url, username_value)
+                ON CONFLICT (project, source, username, browser, origin_url, username_value)
                 DO UPDATE SET
                     origin_url = EXCLUDED.origin_url,
                     username_value = EXCLUDED.username_value,

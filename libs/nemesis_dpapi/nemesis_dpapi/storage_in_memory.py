@@ -1,4 +1,7 @@
-"""Storage backend implementations."""
+"""Storage backend implementations.
+
+Every repository is scoped to a project: entries are keyed by (project, ...) and reads only see the caller's project.
+"""
 
 from uuid import UUID
 
@@ -13,10 +16,10 @@ class InMemoryMasterKeyRepository:
     """In-memory storage for masterkeys."""
 
     def __init__(self) -> None:
-        self._masterkeys: dict[UUID, MasterKey] = {}
+        self._masterkeys: dict[tuple[str, UUID], MasterKey] = {}
 
-    async def upsert_masterkey(self, masterkey: MasterKey) -> None:
-        """Add or update a masterkey in storage with write-once semantics.
+    async def upsert_masterkey(self, masterkey: MasterKey, *, project: str) -> None:
+        """Add or update a project's masterkey with write-once semantics.
 
         Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
         it cannot be changed to a different value (including NULL).
@@ -24,8 +27,9 @@ class InMemoryMasterKeyRepository:
         Raises:
             WriteOnceViolationError: If attempting to modify fields that already have values
         """
-        if masterkey.guid in self._masterkeys:
-            existing = self._masterkeys[masterkey.guid]
+        key = (project, masterkey.guid)
+        if key in self._masterkeys:
+            existing = self._masterkeys[key]
 
             # Check write-once constraints - ensure consistency with PostgreSQL implementation
             conflicts = check_write_once_conflicts(
@@ -45,19 +49,22 @@ class InMemoryMasterKeyRepository:
                 raise WriteOnceViolationError("masterkey", str(masterkey.guid), conflicts)
 
         # Insert or update (only reached if no conflicts)
-        self._masterkeys[masterkey.guid] = masterkey
+        self._masterkeys[key] = masterkey
 
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
+        *,
+        project: str,
         encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
     ) -> list[MasterKey]:
-        """Retrieve masterkey(s) with optional filtering.
+        """Retrieve a project's masterkey(s) with optional filtering.
 
         Args:
             guid: Optional specific masterkey GUID to retrieve. If provided, returns a list with one MasterKey or empty list.
+            project: Only masterkeys stored for this project are returned.
             encryption_filter: Filter by decryption status (default: ALL). Ignored if guid is provided.
             backup_key_guid: Filter by backup key GUID (default: None for all). Ignored if guid is provided.
             masterkey_type: Filter by user account types (default: None for all). Ignored if guid is provided.
@@ -67,11 +74,11 @@ class InMemoryMasterKeyRepository:
         """
         # If guid is provided, return single masterkey as a list
         if guid is not None:
-            mk = self._masterkeys.get(guid)
+            mk = self._masterkeys.get((project, guid))
             return [mk] if mk is not None else []
 
         # Otherwise, return filtered list
-        masterkeys = list(self._masterkeys.values())
+        masterkeys = [mk for (mk_project, _), mk in self._masterkeys.items() if mk_project == project]
 
         # Filter by decryption status
         if encryption_filter == EncryptionFilter.ENCRYPTED_ONLY:
@@ -89,23 +96,23 @@ class InMemoryMasterKeyRepository:
 
         return masterkeys
 
-    async def delete_masterkey(self, guid: UUID) -> None:
-        """Delete a masterkey by GUID."""
-        if guid not in self._masterkeys:
-            raise StorageError(f"Masterkey {guid} not found")
-        del self._masterkeys[guid]
+    async def delete_masterkey(self, guid: UUID, *, project: str) -> None:
+        """Delete a project's masterkey by GUID."""
+        if (project, guid) not in self._masterkeys:
+            raise StorageError(f"Masterkey {guid} not found in project {project!r}")
+        del self._masterkeys[(project, guid)]
 
 
 class InMemoryDomainBackupKeyRepository:
     """In-memory storage for domain backup keys."""
 
     def __init__(self) -> None:
-        self._backup_keys: dict[UUID, DomainBackupKey] = {}
-        self._backup_key_ids: dict[UUID, int] = {}
+        self._backup_keys: dict[tuple[str, UUID], DomainBackupKey] = {}
+        self._backup_key_ids: dict[tuple[str, UUID], int] = {}
         self._next_id: int = 1
 
-    async def upsert_backup_key(self, key: DomainBackupKey) -> int:
-        """Add or update a domain backup key in storage with write-once semantics.
+    async def upsert_backup_key(self, key: DomainBackupKey, *, project: str) -> int:
+        """Add or update a project's domain backup key with write-once semantics.
 
         Write-once enforcement: Fields can only be set once. Once a field has a non-NULL value,
         it cannot be changed to a different value (including NULL).
@@ -116,8 +123,9 @@ class InMemoryDomainBackupKeyRepository:
         Raises:
             WriteOnceViolationError: If attempting to modify fields that already have values
         """
-        if key.guid in self._backup_keys:
-            existing = self._backup_keys[key.guid]
+        store_key = (project, key.guid)
+        if store_key in self._backup_keys:
+            existing = self._backup_keys[store_key]
 
             # Check write-once constraints - ensure consistency with PostgreSQL implementation
             conflicts = check_write_once_conflicts(
@@ -130,56 +138,58 @@ class InMemoryDomainBackupKeyRepository:
                 raise WriteOnceViolationError("backup_key", str(key.guid), conflicts)
 
             # Update existing key, return existing ID
-            self._backup_keys[key.guid] = key
-            return self._backup_key_ids[key.guid]
+            self._backup_keys[store_key] = key
+            return self._backup_key_ids[store_key]
 
         # Insert new key with new ID
         key_id = self._next_id
         self._next_id += 1
-        self._backup_keys[key.guid] = key
-        self._backup_key_ids[key.guid] = key_id
+        self._backup_keys[store_key] = key
+        self._backup_key_ids[store_key] = key_id
         return key_id
 
-    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
-        """Retrieve backup key(s).
+    async def get_backup_keys(self, guid: UUID | None = None, *, project: str) -> list[DomainBackupKey]:
+        """Retrieve a project's backup key(s).
 
         Args:
             guid: Optional specific backup key GUID to retrieve. If provided, returns a list with one key or empty list.
+            project: Only backup keys stored for this project are returned.
 
         Returns:
             A list of DomainBackupKey objects (empty list if no matches)
         """
         if guid is not None:
-            key = self._backup_keys.get(guid)
+            key = self._backup_keys.get((project, guid))
             return [key] if key is not None else []
 
-        return list(self._backup_keys.values())
+        return [key for (key_project, _), key in self._backup_keys.items() if key_project == project]
 
-    async def delete_backup_key(self, guid: UUID) -> None:
-        """Delete a backup key by GUID."""
-        if guid not in self._backup_keys:
-            raise StorageError(f"Domain backup key {guid} not found")
-        del self._backup_keys[guid]
+    async def delete_backup_key(self, guid: UUID, *, project: str) -> None:
+        """Delete a project's backup key by GUID."""
+        if (project, guid) not in self._backup_keys:
+            raise StorageError(f"Domain backup key {guid} not found in project {project!r}")
+        del self._backup_keys[(project, guid)]
 
 
 class InMemoryDpapiSystemCredentialRepository:
     """In-memory storage for DPAPI system credentials."""
 
     def __init__(self) -> None:
-        self._credentials: list[DpapiSystemCredential] = []
+        self._credentials: dict[str, list[DpapiSystemCredential]] = {}
 
-    async def upsert_credential(self, cred: DpapiSystemCredential) -> None:
-        """Add or update a DPAPI system credential in storage."""
-        for i, existing_cred in enumerate(self._credentials):
+    async def upsert_credential(self, cred: DpapiSystemCredential, *, project: str) -> None:
+        """Add or update a project's DPAPI system credential."""
+        credentials = self._credentials.setdefault(project, [])
+        for i, existing_cred in enumerate(credentials):
             if existing_cred.user_key == cred.user_key and existing_cred.machine_key == cred.machine_key:
-                self._credentials[i] = cred
+                credentials[i] = cred
                 return
-        self._credentials.append(cred)
+        credentials.append(cred)
 
-    async def get_all_credentials(self) -> list[DpapiSystemCredential]:
-        """Retrieve all DPAPI system credentials."""
-        return list(self._credentials)
+    async def get_all_credentials(self, *, project: str) -> list[DpapiSystemCredential]:
+        """Retrieve all of a project's DPAPI system credentials."""
+        return list(self._credentials.get(project, []))
 
-    async def delete_all_credentials(self) -> None:
-        """Delete all DPAPI system credentials."""
-        self._credentials.clear()
+    async def delete_all_credentials(self, *, project: str) -> None:
+        """Delete all of a project's DPAPI system credentials."""
+        self._credentials.pop(project, None)

@@ -35,6 +35,8 @@ class AutoDecryptionObserver(DpapiObserver):
     - When new DPAPI_SYSTEM credentials are added, attempts to decrypt existing encrypted masterkeys
     - When new encrypted masterkeys are added, attempts to decrypt them using all available
       domain backup keys and DPAPI_SYSTEM credentials
+
+    Every attempt stays within the event's project: keys from one project never decrypt another project's masterkeys.
     """
 
     def __init__(self, dpapi_manager: "DpapiManager"):
@@ -49,7 +51,7 @@ class AutoDecryptionObserver(DpapiObserver):
         elif isinstance(event, NewEncryptedMasterKeyEvent):
             await self._handle_new_encrypted_masterkey(event)
         elif isinstance(event, NewDpapiSystemCredentialEvent):
-            self._create_task(await self._handle_new_sytem_credential(event))
+            self._create_task(self._handle_new_sytem_credential(event))
 
     def _create_task(self, coroutine) -> asyncio.Task:
         """Creates a background task and maintains a reference until its completion
@@ -69,7 +71,7 @@ class AutoDecryptionObserver(DpapiObserver):
         logger.debug(f"New domain backup key added: {event.backup_key_guid}, attempting decryption...")
 
         start_time = time.perf_counter()
-        await self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid)
+        await self._attempt_masterkey_decryption_with_backup_key(event.backup_key_guid, event.project)
         end_time = time.perf_counter()
 
         logger.debug(f"_attempt_masterkey_decryption_with_backup_key took {end_time - start_time:.4f} seconds")
@@ -77,7 +79,7 @@ class AutoDecryptionObserver(DpapiObserver):
     async def _handle_new_encrypted_masterkey(self, event: NewEncryptedMasterKeyEvent) -> None:
         """Attempt to decrypt a new masterkey using existing domain backup keys."""
 
-        masterkeys = await self.dpapi_manager.get_masterkeys(guid=event.masterkey_guid)
+        masterkeys = await self.dpapi_manager.get_masterkeys(guid=event.masterkey_guid, project=event.project)
 
         if not masterkeys:
             raise ValueError(f"New masterkey {event.masterkey_guid} not found in the DB!")
@@ -92,8 +94,8 @@ class AutoDecryptionObserver(DpapiObserver):
         # - (TODO) Available user credentials
 
         tasks = [
-            self._create_task(self._decrypt_with_backup_keys(masterkey)),
-            self._create_task(self._decrypt_with_system_credentials(masterkey)),
+            self._create_task(self._decrypt_with_backup_keys(masterkey, event.project)),
+            self._create_task(self._decrypt_with_system_credentials(masterkey, event.project)),
             # self._create_task(self._decrypt_with_user_credentials(masterkey)),  # TODO
         ]
 
@@ -105,13 +107,13 @@ class AutoDecryptionObserver(DpapiObserver):
         logger.debug("New DPAPI_SYSTEM credential added. Attempting decryption...")
 
         start_time = time.perf_counter()
-        await self._attempt_masterkey_decryption_with_system_credential(event.credential)
+        await self._attempt_masterkey_decryption_with_system_credential(event.credential, event.project)
         end_time = time.perf_counter()
 
         logger.debug(f"_attempt_masterkey_decryption_with_system_credential took {end_time - start_time:.4f} seconds")
 
     async def _attempt_masterkey_decryption_with_system_credential(
-        self, credential: DpapiSystemCredential, encrypted_masterkeys: list[MasterKey] | None = None
+        self, credential: DpapiSystemCredential, project: str, encrypted_masterkeys: list[MasterKey] | None = None
     ) -> None:
         """Attempt to decrypt all encrypted masterkeys using the new DPAPI system credentials."""
         start_time = time.perf_counter()
@@ -121,6 +123,7 @@ class AutoDecryptionObserver(DpapiObserver):
         if encrypted_masterkeys is None:
             # Filter out User masterkeys
             encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
+                project=project,
                 encryption_filter=EncryptionFilter.ENCRYPTED_ONLY,
                 masterkey_type=[MasterKeyType.SYSTEM, MasterKeyType.SYSTEM_USER, MasterKeyType.UNKNOWN],
             )
@@ -148,7 +151,7 @@ class AutoDecryptionObserver(DpapiObserver):
                         continue
 
                     print(f"Successfully decrypted masterkey {encrypted_mk.guid} with DPAPI_SYSTEM credential")
-                    await self.dpapi_manager.upsert_masterkey(plaintext_mk)
+                    await self.dpapi_manager.upsert_masterkey(plaintext_mk, project=project)
                     break  # Decrypted successfully, no need to try other key
             except Exception as e:
                 logger.error(
@@ -160,7 +163,7 @@ class AutoDecryptionObserver(DpapiObserver):
         logger.debug(f"_attempt_masterkey_decryption_with_system_credential took {end_time - start_time:.4f} seconds")
 
     async def _attempt_masterkey_decryption_with_backup_key(
-        self, backup_key_guid: UUID, encrypted_masterkeys: list[MasterKey] | None = None
+        self, backup_key_guid: UUID, project: str, encrypted_masterkeys: list[MasterKey] | None = None
     ) -> None:
         """Attempt to decrypt masterkeys using a backup key."""
 
@@ -168,6 +171,7 @@ class AutoDecryptionObserver(DpapiObserver):
             if encrypted_masterkeys is None:
                 # Filter out SYSTEM masterkeys
                 encrypted_masterkeys = await self.dpapi_manager.get_masterkeys(
+                    project=project,
                     encryption_filter=EncryptionFilter.ENCRYPTED_ONLY,
                     masterkey_type=[MasterKeyType.USER, MasterKeyType.UNKNOWN],
                 )
@@ -175,7 +179,7 @@ class AutoDecryptionObserver(DpapiObserver):
             if not encrypted_masterkeys:
                 return
 
-            backup_keys = await self.dpapi_manager.get_backup_keys(guid=backup_key_guid)
+            backup_keys = await self.dpapi_manager.get_backup_keys(guid=backup_key_guid, project=project)
 
             if not backup_keys:
                 return
@@ -234,18 +238,18 @@ class AutoDecryptionObserver(DpapiObserver):
                         backup_key_guid=result.backup_key_guid,
                     )
 
-                    await self.dpapi_manager.upsert_masterkey(new_mk)
+                    await self.dpapi_manager.upsert_masterkey(new_mk, project=project)
 
         except Exception as e:
             logger.error(f"Auto-decrypt _attempt_masterkey_decryption_with_backup_key error: {e}")
 
-    async def _decrypt_with_backup_keys(self, masterkey: MasterKey) -> None:
-        """Attempt to decrypt a masterkey using all available backup keys."""
+    async def _decrypt_with_backup_keys(self, masterkey: MasterKey, project: str) -> None:
+        """Attempt to decrypt a masterkey using the project's backup keys."""
         start_time = time.perf_counter()
         if masterkey.encrypted_key_backup is None:
             return  # Cannot decrypt if there's no backup key data
 
-        backup_keys = await self.dpapi_manager.get_backup_keys()
+        backup_keys = await self.dpapi_manager.get_backup_keys(project=project)
         if not backup_keys:
             return
 
@@ -286,14 +290,14 @@ class AutoDecryptionObserver(DpapiObserver):
                     backup_key_guid=result.backup_key_guid,
                 )
                 print(f"Successfully decrypted masterkey {masterkey.guid} with backup key {backup_key.guid}")
-                await self.dpapi_manager.upsert_masterkey(new_mk)
+                await self.dpapi_manager.upsert_masterkey(new_mk, project=project)
                 break
 
         end_time = time.perf_counter()
         logger.debug(f"_attempt_masterkey_decryption took {end_time - start_time:.4f} seconds")
 
-    async def _decrypt_with_system_credentials(self, masterkey: MasterKey) -> None:
-        """Attempt to decrypt a masterkey using all available DPAPI_SYSTEM credentials."""
+    async def _decrypt_with_system_credentials(self, masterkey: MasterKey, project: str) -> None:
+        """Attempt to decrypt a masterkey using the project's DPAPI_SYSTEM credentials."""
 
         if masterkey.masterkey_type == MasterKeyType.USER:
             return  # Skip user masterkeys
@@ -302,13 +306,13 @@ class AutoDecryptionObserver(DpapiObserver):
         if masterkey.encrypted_key_usercred is None:
             return  # Cannot decrypt if there's no user credential data
 
-        system_credentials = await self.dpapi_manager.get_system_credentials()
+        system_credentials = await self.dpapi_manager.get_system_credentials(project=project)
         if not system_credentials:
             return
 
         # Try to decrypt the masterkey with each system credential
         for credential in system_credentials:
-            await self._attempt_masterkey_decryption_with_system_credential(credential, [masterkey])
+            await self._attempt_masterkey_decryption_with_system_credential(credential, project, [masterkey])
 
         end_time = time.perf_counter()
         logger.debug(f"_decrypt_with_system_credentials took {end_time - start_time:.4f} seconds")

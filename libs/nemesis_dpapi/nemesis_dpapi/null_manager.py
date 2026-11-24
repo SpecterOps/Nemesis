@@ -21,25 +21,27 @@ class NullDpapiManager(DpapiManagerProtocol):
         """Async context manager exit."""
         pass
 
-    async def upsert_masterkey(self, masterkey: MasterKey) -> None:
+    async def upsert_masterkey(self, masterkey: MasterKey, *, project: str) -> None:
         """Add or update a masterkey (does nothing)."""
         pass
 
-    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey) -> int:
+    async def upsert_domain_backup_key(self, backup_key: DomainBackupKey, *, project: str) -> int:
         """Add or update a domain backup key (does nothing)."""
         return 0
 
-    async def upsert_system_credential(self, cred: DpapiSystemCredential) -> None:
+    async def upsert_system_credential(self, cred: DpapiSystemCredential, *, project: str) -> None:
         """Add or update a DPAPI system credential (does nothing)."""
         pass
 
-    async def decrypt_blob(self, blob: Blob) -> bytes:
+    async def decrypt_blob(self, blob: Blob, entropy: bytes | None = None, *, project: str) -> bytes:
         """Decrypt a DPAPI blob (always fails)."""
         raise MasterKeyNotFoundError(blob.masterkey_guid)
 
     async def get_masterkeys(
         self,
         guid: UUID | None = None,
+        *,
+        project: str,
         encryption_filter: EncryptionFilter = EncryptionFilter.ALL,
         backup_key_guid: UUID | None = None,
         masterkey_type: list[MasterKeyType] | None = None,
@@ -47,10 +49,10 @@ class NullDpapiManager(DpapiManagerProtocol):
         """Retrieve masterkey(s) with optional filtering (always returns empty list)."""
         return []
 
-    async def get_system_credentials(self) -> list[DpapiSystemCredential]:
+    async def get_system_credentials(self, *, project: str) -> list[DpapiSystemCredential]:
         """Retrieve DPAPI system credential(s) (always returns empty list)."""
         return []
 
-    async def get_backup_keys(self, guid: UUID | None = None) -> list[DomainBackupKey]:
+    async def get_backup_keys(self, guid: UUID | None = None, *, project: str) -> list[DomainBackupKey]:
         """Retrieve domain backup key(s) (always returns empty list)."""
         return []

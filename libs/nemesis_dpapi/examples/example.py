@@ -40,6 +40,9 @@ from nemesis_dpapi.eventing import (
     NewPlaintextMasterKeyEvent,
 )
 
+# DPAPI key material is scoped to a project; these examples use one.
+PROJECT = "example-project"
+
 
 class MyDpapiEventMonitor(DpapiObserver):
     """Class that observes DPAPI events."""
@@ -92,10 +95,11 @@ async def main() -> None:
                 encrypted_key_usercred=masterkey_file.master_key,
                 encrypted_key_backup=masterkey_file.domain_backup_key.raw_bytes,
                 masterkey_type=masterkey_file.masterkey_type,
-            )
+            ),
+            project=PROJECT,
         )
 
-        encrypted_mks = await manager.get_masterkeys(encryption_filter=EncryptionFilter.ENCRYPTED_ONLY)
+        encrypted_mks = await manager.get_masterkeys(encryption_filter=EncryptionFilter.ENCRYPTED_ONLY, project=PROJECT)
         if len(encrypted_mks) == 1:
             print("[✅] Added 1 masterkey:")
         else:
@@ -109,7 +113,7 @@ async def main() -> None:
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await manager.upsert_domain_backup_key(real_backup_key)
+        await manager.upsert_domain_backup_key(real_backup_key, project=PROJECT)
 
         print(f"[✅] Added domain backup key: {real_backup_key.guid}")
 
@@ -117,8 +121,10 @@ async def main() -> None:
         await asyncio.sleep(1)
 
         # Check final results
-        all_keys_final = await manager.get_masterkeys()
-        decrypted_keys_final = await manager.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY)
+        all_keys_final = await manager.get_masterkeys(project=PROJECT)
+        decrypted_keys_final = await manager.get_masterkeys(
+            encryption_filter=EncryptionFilter.DECRYPTED_ONLY, project=PROJECT
+        )
 
         if len(decrypted_keys_final) == 0:
             raise ValueError("❗ No masterkeys were auto-decrypted. This is unexpected and something is broken!")
@@ -143,7 +149,7 @@ async def main() -> None:
         print(f"[*] Blob masterkey GUID: {blob.masterkey_guid}")
 
         # Decrypt the blob using the DPAPI manager
-        decrypted_blob_data = await manager.decrypt_blob(blob)
+        decrypted_blob_data = await manager.decrypt_blob(blob, project=PROJECT)
         print(f"[*] Decrypted blob data: {decrypted_blob_data.decode('utf-8')}")
 
         if decrypted_blob_data == b"test":

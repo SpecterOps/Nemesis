@@ -24,10 +24,10 @@ class TestMasterKeyWriteOnce:
                 plaintext_key=b"plaintext_key_data",
             )
 
-            await manager.upsert_masterkey(masterkey)
+            await manager.upsert_masterkey(masterkey, project="proj-a")
 
             # Verify it was inserted
-            result = await manager.get_masterkeys(guid=guid)
+            result = await manager.get_masterkeys(guid=guid, project="proj-a")
             assert len(result) == 1
             assert result[0].guid == guid
 
@@ -43,13 +43,13 @@ class TestMasterKeyWriteOnce:
             )
 
             # First insert
-            await manager.upsert_masterkey(masterkey)
+            await manager.upsert_masterkey(masterkey, project="proj-a")
 
             # Second insert with same values should succeed
-            await manager.upsert_masterkey(masterkey)
+            await manager.upsert_masterkey(masterkey, project="proj-a")
 
             # Verify
-            result = await manager.get_masterkeys(guid=guid)
+            result = await manager.get_masterkeys(guid=guid, project="proj-a")
             assert len(result) == 1
 
     @pytest.mark.asyncio
@@ -64,7 +64,7 @@ class TestMasterKeyWriteOnce:
                 masterkey_type=MasterKeyType.USER,
                 encrypted_key_usercred=b"original_data",
             )
-            await manager.upsert_masterkey(masterkey1)
+            await manager.upsert_masterkey(masterkey1, project="proj-a")
 
             # Try to change encrypted_key_usercred
             masterkey2 = MasterKey(
@@ -74,7 +74,7 @@ class TestMasterKeyWriteOnce:
             )
 
             with pytest.raises(WriteOnceViolationError) as exc_info:
-                await manager.upsert_masterkey(masterkey2)
+                await manager.upsert_masterkey(masterkey2, project="proj-a")
 
             # Verify error details
             assert exc_info.value.entity_type == "masterkey"
@@ -93,7 +93,7 @@ class TestMasterKeyWriteOnce:
                 masterkey_type=MasterKeyType.USER,
                 plaintext_key=b"original_plaintext",
             )
-            await manager.upsert_masterkey(masterkey1)
+            await manager.upsert_masterkey(masterkey1, project="proj-a")
 
             # Try to change plaintext_key
             masterkey2 = MasterKey(
@@ -103,7 +103,7 @@ class TestMasterKeyWriteOnce:
             )
 
             with pytest.raises(WriteOnceViolationError) as exc_info:
-                await manager.upsert_masterkey(masterkey2)
+                await manager.upsert_masterkey(masterkey2, project="proj-a")
 
             assert "plaintext_key" in exc_info.value.fields
 
@@ -118,7 +118,7 @@ class TestMasterKeyWriteOnce:
                 guid=guid,
                 masterkey_type=MasterKeyType.UNKNOWN,
             )
-            await manager.upsert_masterkey(masterkey1)
+            await manager.upsert_masterkey(masterkey1, project="proj-a")
 
             # Try to change to USER (even though it's a refinement, we're strict)
             masterkey2 = MasterKey(
@@ -127,7 +127,7 @@ class TestMasterKeyWriteOnce:
             )
 
             with pytest.raises(WriteOnceViolationError) as exc_info:
-                await manager.upsert_masterkey(masterkey2)
+                await manager.upsert_masterkey(masterkey2, project="proj-a")
 
             assert "masterkey_type" in exc_info.value.fields
 
@@ -143,7 +143,7 @@ class TestMasterKeyWriteOnce:
                 masterkey_type=MasterKeyType.USER,
                 encrypted_key_usercred=b"encrypted_data",
             )
-            await manager.upsert_masterkey(masterkey1)
+            await manager.upsert_masterkey(masterkey1, project="proj-a")
 
             # Add plaintext_key (previously NULL)
             masterkey2 = MasterKey(
@@ -152,10 +152,10 @@ class TestMasterKeyWriteOnce:
                 encrypted_key_usercred=b"encrypted_data",  # Same
                 plaintext_key=b"now_decrypted",  # New
             )
-            await manager.upsert_masterkey(masterkey2)
+            await manager.upsert_masterkey(masterkey2, project="proj-a")
 
             # Verify both fields are set
-            result = await manager.get_masterkeys(guid=guid)
+            result = await manager.get_masterkeys(guid=guid, project="proj-a")
             assert result[0].encrypted_key_usercred == b"encrypted_data"
             assert result[0].plaintext_key == b"now_decrypted"
 
@@ -171,7 +171,7 @@ class TestMasterKeyWriteOnce:
                 masterkey_type=MasterKeyType.USER,
                 plaintext_key=b"plaintext_data",
             )
-            await manager.upsert_masterkey(masterkey1)
+            await manager.upsert_masterkey(masterkey1, project="proj-a")
 
             # Try to clear plaintext_key
             masterkey2 = MasterKey(
@@ -181,7 +181,7 @@ class TestMasterKeyWriteOnce:
             )
 
             with pytest.raises(WriteOnceViolationError) as exc_info:
-                await manager.upsert_masterkey(masterkey2)
+                await manager.upsert_masterkey(masterkey2, project="proj-a")
 
             assert "plaintext_key" in exc_info.value.fields
 
@@ -201,10 +201,10 @@ class TestMasterKeyWriteOnce:
                 plaintext_key=plaintext,
                 # Note: plaintext_key_sha1 not provided
             )
-            await manager.upsert_masterkey(masterkey)
+            await manager.upsert_masterkey(masterkey, project="proj-a")
 
             # Verify SHA1 was calculated
-            result = await manager.get_masterkeys(guid=guid)
+            result = await manager.get_masterkeys(guid=guid, project="proj-a")
             assert result[0].plaintext_key_sha1 == expected_sha1
 
     @pytest.mark.asyncio
@@ -224,10 +224,10 @@ class TestMasterKeyWriteOnce:
                 plaintext_key_sha1=correct_sha1,
             )
 
-            await manager.upsert_masterkey(masterkey)
+            await manager.upsert_masterkey(masterkey, project="proj-a")
 
             # Verify
-            result = await manager.get_masterkeys(guid=guid)
+            result = await manager.get_masterkeys(guid=guid, project="proj-a")
             assert result[0].plaintext_key_sha1 == correct_sha1
 
     @pytest.mark.asyncio
@@ -243,10 +243,10 @@ class TestMasterKeyWriteOnce:
                 plaintext_key_sha1=sha1_value,  # Only SHA1
             )
 
-            await manager.upsert_masterkey(masterkey)
+            await manager.upsert_masterkey(masterkey, project="proj-a")
 
             # Verify
-            result = await manager.get_masterkeys(guid=guid)
+            result = await manager.get_masterkeys(guid=guid, project="proj-a")
             assert result[0].plaintext_key_sha1 == sha1_value
             assert result[0].plaintext_key is None
 
@@ -263,7 +263,7 @@ class TestMasterKeyWriteOnce:
                 encrypted_key_usercred=b"encrypted1",
                 plaintext_key=b"plaintext1",
             )
-            await manager.upsert_masterkey(masterkey1)
+            await manager.upsert_masterkey(masterkey1, project="proj-a")
 
             # Try to change both
             masterkey2 = MasterKey(
@@ -274,7 +274,7 @@ class TestMasterKeyWriteOnce:
             )
 
             with pytest.raises(WriteOnceViolationError) as exc_info:
-                await manager.upsert_masterkey(masterkey2)
+                await manager.upsert_masterkey(masterkey2, project="proj-a")
 
             # Should report both conflicts
             assert "encrypted_key_usercred" in exc_info.value.fields
@@ -325,10 +325,10 @@ class TestDomainBackupKeyWriteOnce:
                 domain_controller="DC01.contoso.com",
             )
 
-            await manager.upsert_domain_backup_key(backup_key)
+            await manager.upsert_domain_backup_key(backup_key, project="proj-a")
 
             # Verify
-            result = await manager.get_backup_keys(guid=guid)
+            result = await manager.get_backup_keys(guid=guid, project="proj-a")
             assert len(result) == 1
             assert result[0].guid == guid
 
@@ -344,10 +344,10 @@ class TestDomainBackupKeyWriteOnce:
                 key_data=key_data,
             )
 
-            await manager.upsert_domain_backup_key(backup_key)
-            await manager.upsert_domain_backup_key(backup_key)  # Should succeed
+            await manager.upsert_domain_backup_key(backup_key, project="proj-a")
+            await manager.upsert_domain_backup_key(backup_key, project="proj-a")  # Should succeed
 
-            result = await manager.get_backup_keys(guid=guid)
+            result = await manager.get_backup_keys(guid=guid, project="proj-a")
             assert len(result) == 1
 
     @pytest.mark.asyncio
@@ -360,13 +360,13 @@ class TestDomainBackupKeyWriteOnce:
 
             # First insert
             backup_key1 = DomainBackupKey(guid=guid, key_data=key_data1)
-            await manager.upsert_domain_backup_key(backup_key1)
+            await manager.upsert_domain_backup_key(backup_key1, project="proj-a")
 
             # Try to change
             backup_key2 = DomainBackupKey(guid=guid, key_data=key_data2)
 
             with pytest.raises(WriteOnceViolationError) as exc_info:
-                await manager.upsert_domain_backup_key(backup_key2)
+                await manager.upsert_domain_backup_key(backup_key2, project="proj-a")
 
             assert exc_info.value.entity_type == "backup_key"
             assert "key_data" in exc_info.value.fields
@@ -384,7 +384,7 @@ class TestDomainBackupKeyWriteOnce:
                 key_data=key_data,
                 domain_controller="DC01.contoso.com",
             )
-            await manager.upsert_domain_backup_key(backup_key1)
+            await manager.upsert_domain_backup_key(backup_key1, project="proj-a")
 
             # Try to change domain_controller
             backup_key2 = DomainBackupKey(
@@ -394,7 +394,7 @@ class TestDomainBackupKeyWriteOnce:
             )
 
             with pytest.raises(WriteOnceViolationError) as exc_info:
-                await manager.upsert_domain_backup_key(backup_key2)
+                await manager.upsert_domain_backup_key(backup_key2, project="proj-a")
 
             assert "domain_controller" in exc_info.value.fields
 
@@ -407,7 +407,7 @@ class TestDomainBackupKeyWriteOnce:
 
             # First insert without domain_controller
             backup_key1 = DomainBackupKey(guid=guid, key_data=key_data)
-            await manager.upsert_domain_backup_key(backup_key1)
+            await manager.upsert_domain_backup_key(backup_key1, project="proj-a")
 
             # Add domain_controller
             backup_key2 = DomainBackupKey(
@@ -415,10 +415,10 @@ class TestDomainBackupKeyWriteOnce:
                 key_data=key_data,
                 domain_controller="DC01.contoso.com",
             )
-            await manager.upsert_domain_backup_key(backup_key2)
+            await manager.upsert_domain_backup_key(backup_key2, project="proj-a")
 
             # Verify
-            result = await manager.get_backup_keys(guid=guid)
+            result = await manager.get_backup_keys(guid=guid, project="proj-a")
             assert result[0].domain_controller == "DC01.contoso.com"
 
     @pytest.mark.asyncio
@@ -435,7 +435,7 @@ class TestDomainBackupKeyWriteOnce:
             )
 
             with pytest.raises(ValueError, match="cannot be empty string"):
-                await manager.upsert_domain_backup_key(backup_key)
+                await manager.upsert_domain_backup_key(backup_key, project="proj-a")
 
     @pytest.mark.asyncio
     async def test_case_sensitive_domain_controller(self):
@@ -450,7 +450,7 @@ class TestDomainBackupKeyWriteOnce:
                 key_data=key_data,
                 domain_controller="DC01.CONTOSO.COM",
             )
-            await manager.upsert_domain_backup_key(backup_key1)
+            await manager.upsert_domain_backup_key(backup_key1, project="proj-a")
 
             # Try with lowercase (different value due to case sensitivity)
             backup_key2 = DomainBackupKey(
@@ -460,7 +460,7 @@ class TestDomainBackupKeyWriteOnce:
             )
 
             with pytest.raises(WriteOnceViolationError):
-                await manager.upsert_domain_backup_key(backup_key2)
+                await manager.upsert_domain_backup_key(backup_key2, project="proj-a")
 
 
 class TestSystemCredentialWriteOnce:
@@ -474,12 +474,12 @@ class TestSystemCredentialWriteOnce:
         async with DpapiManager(storage_backend="memory", auto_decrypt=False) as manager:
             # First insert
             cred1 = DpapiSystemCredential(user_key=b"0" * 20, machine_key=b"1" * 20)
-            await manager.upsert_system_credential(cred1)
+            await manager.upsert_system_credential(cred1, project="proj-a")
 
             # Second insert with same keys (should succeed, idempotent)
             cred2 = DpapiSystemCredential(user_key=b"0" * 20, machine_key=b"1" * 20)
-            await manager.upsert_system_credential(cred2)
+            await manager.upsert_system_credential(cred2, project="proj-a")
 
             # Verify
-            result = await manager.get_system_credentials()
+            result = await manager.get_system_credentials(project="proj-a")
             assert len(result) == 1

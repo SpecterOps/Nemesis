@@ -15,12 +15,14 @@ from .local_state import retry_decrypt_state_keys_for_chromekey
 logger = get_logger(__name__)
 
 
-async def _retry_state_keys_for_chromekey_after_decrypt(source: str, chromekey: bytes, asyncpg_pool: asyncpg.Pool):
-    """Helper to retry state key decryption after a chromekey is decrypted.
+async def _retry_state_keys_for_chromekey_after_decrypt(
+    source: str, chromekey: bytes, asyncpg_pool: asyncpg.Pool, project: str | None
+):
+    """Helper to retry the project's state key decryption after a chromekey is decrypted.
 
     Import is done here to avoid circular dependency issues.
     """
-    return await retry_decrypt_state_keys_for_chromekey(source, chromekey, asyncpg_pool)
+    return await retry_decrypt_state_keys_for_chromekey(source, chromekey, asyncpg_pool, project=project)
 
 
 async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool) -> dict:
@@ -44,7 +46,7 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
     async with asyncpg_pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, source, key_masterkey_guid, key_bytes_enc,
+            SELECT id, project, source, key_masterkey_guid, key_bytes_enc,
                    key_bytes_dec, key_is_decrypted
             FROM chromium.chrome_keys
             WHERE id = $1
@@ -57,6 +59,8 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
             return result
 
         _record_id = row["id"]  # noqa: F841
+        # The chromekey is only decrypted with, and only unlocks, its own project's keys
+        chrome_key_project = row["project"]
         source = row["source"]
         _key_masterkey_guid = row["key_masterkey_guid"]  # noqa: F841
         key_bytes_enc = row["key_bytes_enc"]
@@ -72,7 +76,9 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
         try:
             dpapi_blob = Blob.from_bytes(key_bytes_enc)
             try:
-                decrypted_blob = await dpapi_manager.decrypt_blob(dpapi_blob, entropy=cng_key_blob_entropy)
+                decrypted_blob = await dpapi_manager.decrypt_blob(
+                    dpapi_blob, entropy=cng_key_blob_entropy, project=chrome_key_project
+                )
                 if decrypted_blob:
                     # Check for BCRYPT_KEY_DATA_BLOB and log details
                     if check_bcrypt_key_blob(decrypted_blob):
@@ -106,7 +112,7 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
                             # Now try to decrypt any state_keys waiting for this chromekey
                             try:
                                 state_keys_result = await _retry_state_keys_for_chromekey_after_decrypt(
-                                    source, key_bytes_dec, asyncpg_pool
+                                    source, key_bytes_dec, asyncpg_pool, chrome_key_project
                                 )
                                 result["state_keys_result"] = state_keys_result
                                 logger.info(
@@ -141,12 +147,18 @@ async def retry_decrypt_chrome_key(chrome_key_id: int, dpapi_manager: DpapiManag
 
 
 async def retry_decrypt_chrome_keys_for_masterkey(
-    masterkey_guid: UUID, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool, masterkey_type: str | None = None
+    masterkey_guid: UUID,
+    dpapi_manager: DpapiManager,
+    asyncpg_pool: asyncpg.Pool,
+    masterkey_type: str | None = None,
+    *,
+    project: str,
 ) -> dict:
-    """Find all chrome_keys waiting for this masterkey and try to decrypt them.
+    """Find the project's chrome_keys waiting for this masterkey and try to decrypt them.
 
     Args:
         masterkey_guid: The GUID of the newly available masterkey
+        project: Project the masterkey belongs to; only that project's chrome_keys are retried
         dpapi_manager: DpapiManager instance for decryption
         asyncpg_pool: Async Postgres connection pool
         masterkey_type: Optional masterkey type ('system', 'user', 'unknown') for optimization
@@ -175,9 +187,9 @@ async def retry_decrypt_chrome_keys_for_masterkey(
             # SYSTEM keys are used for chrome_keys, but if type is unknown, still try
             query = """
                 SELECT DISTINCT id FROM chromium.chrome_keys
-                WHERE key_masterkey_guid = $1 AND key_is_decrypted = FALSE
+                WHERE key_masterkey_guid = $1 AND key_is_decrypted = FALSE AND project = $2
             """
-            chrome_key_rows = await conn.fetch(query, str(masterkey_guid))
+            chrome_key_rows = await conn.fetch(query, str(masterkey_guid), project)
             chrome_key_ids = [row["id"] for row in chrome_key_rows]
 
         logger.debug(

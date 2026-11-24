@@ -11,7 +11,7 @@ const ROW_HEIGHT = 48;
 // Above this many matching keys the list is server-paginated instead of loaded whole
 const PAGINATION_THRESHOLD = 5000;
 const PAGE_SIZE = 100;
-const TABLE_FIELDS = 'guid plaintext_key_sha1 backup_key_guid';
+const TABLE_FIELDS = 'id project guid plaintext_key_sha1 backup_key_guid';
 
 /** @param {{ index: number, style: import('react').CSSProperties, data: any }} props */
 const RecordRow = ({ index, style, data }) => {
@@ -47,6 +47,15 @@ const RecordRow = ({ index, style, data }) => {
       style={style}
       className="flex items-center border-b dark:border-gray-700 transition-colors dark:bg-dark-secondary hover:bg-gray-100 dark:hover:bg-gray-700"
     >
+      <div
+        className={`px-4 flex-shrink-0 w-48 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'project' ? 'bg-green-200 dark:bg-green-800' : ''}`}
+        onDoubleClick={() => handleCellDoubleClick(record.project, 'project')}
+        title="Double-click to copy"
+      >
+        <Tooltip content={record.project || ''} side="top" align="start">
+          <span className="block truncate">{record.project || ''}</span>
+        </Tooltip>
+      </div>
       <div
         className={`px-4 flex-shrink-0 w-96 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'guid' ? 'bg-green-200 dark:bg-green-800' : ''}`}
         onDoubleClick={() => handleCellDoubleClick(record.guid, 'guid')}
@@ -114,11 +123,12 @@ const DpapiMasterKeys = () => {
   const [currentPage, setCurrentPage] = useState(1);
 
   // Valid columns for sorting
-  const VALID_SORT_COLUMNS = ['guid', 'plaintext_key_sha1', 'backup_key_guid'];
+  const VALID_SORT_COLUMNS = ['project', 'guid', 'plaintext_key_sha1', 'backup_key_guid'];
   const DEFAULT_SORT_COLUMN = 'guid';
 
   // Filter states
   const [guidFilter, setGuidFilter] = useState(() => searchParams.get('guid') || '');
+  const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') || '');
   const [sortColumn, setSortColumn] = useState(() => {
     const columnFromUrl = searchParams.get('sort_column');
     return VALID_SORT_COLUMNS.includes(columnFromUrl) ? columnFromUrl : DEFAULT_SORT_COLUMN;
@@ -135,9 +145,18 @@ const DpapiMasterKeys = () => {
   };
 
   const debouncedGuidFilter = useDebouncedValue(guidFilter);
+  const debouncedProjectFilter = useDebouncedValue(projectFilter);
 
   const buildWhereClause = () => {
     const conditions = [];
+
+    if (debouncedProjectFilter) {
+      const hasWildcard = debouncedProjectFilter.includes('*');
+      const pattern = hasWildcard
+        ? debouncedProjectFilter.replace(/\*/g, '%')
+        : `%${debouncedProjectFilter}%`;
+      conditions.push({ project: { _ilike: pattern } });
+    }
 
     if (debouncedGuidFilter) {
       // If user provided wildcards, use them as-is; otherwise add wildcards around the term
@@ -148,11 +167,12 @@ const DpapiMasterKeys = () => {
       conditions.push({ guid: { _ilike: pattern } });
     }
 
-    return conditions.length > 0 ? conditions[0] : {};
+    if (conditions.length === 0) return {};
+    return conditions.length === 1 ? conditions[0] : { _and: conditions };
   };
 
-  // guid is unique, so it needs no tiebreaker
-  const buildOrderByClause = () => buildStableOrderBy(sortColumn, sortDirection, sortColumn === 'guid' ? null : 'id');
+  // A GUID is only unique within a project, so every sort needs the id tiebreaker
+  const buildOrderByClause = () => buildStableOrderBy(sortColumn, sortDirection, 'id');
 
   const { records, totalCount, isPaginated, isLoading, error } = useHasuraTable({
     table: 'dpapi_masterkeys',
@@ -175,17 +195,23 @@ const DpapiMasterKeys = () => {
       params.delete('guid');
     }
 
+    if (projectFilter) {
+      params.set('project', projectFilter);
+    } else {
+      params.delete('project');
+    }
+
     params.set('sort_column', sortColumn);
     params.set('sort_direction', sortDirection);
 
     setSearchParams(params, { replace: true });
-  }, [guidFilter, sortColumn, sortDirection, setSearchParams]);
+  }, [guidFilter, projectFilter, sortColumn, sortDirection, setSearchParams]);
 
 
   // Memoized so typing in a filter box doesn't re-render every visible row
   const itemData = useMemo(() => ({ records }), [records]);
   const pagedRows = useMemo(() => records.map((record, index) => (
-    <Row key={record.guid} index={index} style={{ height: ROW_HEIGHT }} data={{ records }} />
+    <Row key={record.id} index={index} style={{ height: ROW_HEIGHT }} data={{ records }} />
   )), [records]);
 
   return (
@@ -195,6 +221,16 @@ const DpapiMasterKeys = () => {
         <div className="flex items-center space-x-4 min-w-max">
           <div className="flex items-center space-x-2">
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <input
+              type="text"
+              placeholder="Filter by project"
+              className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
+              value={projectFilter}
+              onChange={(e) => {
+                setProjectFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
             <input
               type="text"
               placeholder="Filter by GUID"
@@ -216,6 +252,15 @@ const DpapiMasterKeys = () => {
 
       {/* Headers */}
       <div className="flex border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <SortableHeader
+          column="project"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
+          onSort={handleSort}
+          className="flex-shrink-0 w-48"
+        >
+          Project
+        </SortableHeader>
         <SortableHeader
           column="guid"
           currentSort={sortColumn}

@@ -130,11 +130,12 @@ async def _add_user_masterkey_link(
     )
 
 
-async def _get_chromekey_from_source(source: str, asyncpg_pool: asyncpg.Pool) -> bytes | None:
-    """Get decrypted Chrome key from chrome_keys table by source.
+async def _get_chromekey_from_source(source: str, asyncpg_pool: asyncpg.Pool, *, project: str | None) -> bytes | None:
+    """Get a project's decrypted Chrome key from chrome_keys table by source.
 
     Args:
         source: Source value to match
+        project: Only chromekeys of this project are considered
         asyncpg_pool: Async Postgres connection pool
 
     Returns:
@@ -143,7 +144,10 @@ async def _get_chromekey_from_source(source: str, asyncpg_pool: asyncpg.Pool) ->
     try:
         async with asyncpg_pool.acquire() as conn:
             result = await conn.fetchrow(
-                "SELECT key_bytes_dec FROM chromium.chrome_keys WHERE source = $1 AND key_is_decrypted = TRUE", source
+                """SELECT key_bytes_dec FROM chromium.chrome_keys
+                   WHERE project IS NOT DISTINCT FROM $1 AND source = $2 AND key_is_decrypted = TRUE""",
+                project,
+                source,
             )
             return result["key_bytes_dec"] if result else None
     except Exception as e:
@@ -167,8 +171,11 @@ async def _insert_state_keys(
         # Extract os_crypt section
         os_crypt = data.get("os_crypt", {})
 
+        # DPAPI keys, chromekeys and state keys are only ever used within the file's project.
+        state_key_project = file_enriched.project
+
         # Get Chrome key from chrome_keys table if available
-        chromekey = await _get_chromekey_from_source(file_enriched.source, asyncpg_pool)
+        chromekey = await _get_chromekey_from_source(file_enriched.source, asyncpg_pool, project=state_key_project)
 
         key_bytes_dec = b""
         key_is_decrypted = False
@@ -199,7 +206,7 @@ async def _insert_state_keys(
             dpapi_blob = Blob.from_bytes(dpapi_blob_bytes)
             key_masterkey_guid = str(dpapi_blob.masterkey_guid)
             try:
-                key_bytes_dec = await dpapi_manager.decrypt_blob(dpapi_blob)
+                key_bytes_dec = await dpapi_manager.decrypt_blob(dpapi_blob, project=state_key_project)
                 if key_bytes_dec:
                     key_is_decrypted = True
                     logger.debug(
@@ -262,7 +269,9 @@ async def _insert_state_keys(
                 if len(app_bound_key_enc) >= 4 and app_bound_key_enc[:4] == b"APPB":
                     dpapi_portion = app_bound_key_enc[4:]
                     # Step 1 - decrypt with a SYSTEM masterkey
-                    app_bound_key_system_dec = await dpapi_manager.decrypt_blob(Blob.from_bytes(dpapi_portion))
+                    app_bound_key_system_dec = await dpapi_manager.decrypt_blob(
+                        Blob.from_bytes(dpapi_portion), project=state_key_project
+                    )
                 else:
                     logger.warning("App-bound key missing APPB header, cannot decrypt")
                     app_bound_key_system_dec = b""
@@ -273,7 +282,7 @@ async def _insert_state_keys(
 
                     try:
                         # Step 2 - decrypt with a _user_ masterkey
-                        abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob)
+                        abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob, project=state_key_project)
                         if abe_blob_bytes:
                             # Store the intermediate value after USER key decryption
                             app_bound_key_user_dec = abe_blob_bytes
@@ -354,7 +363,7 @@ async def _insert_state_keys(
                  app_bound_key_user_masterkey_guid, app_bound_key_system_dec, app_bound_key_user_dec,
                  app_bound_key_dec, app_bound_key_is_decrypted)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-                ON CONFLICT (source, username, browser)
+                ON CONFLICT (project, source, username, browser)
                 DO UPDATE SET
                     key_masterkey_guid = EXCLUDED.key_masterkey_guid,
                     key_bytes_enc = EXCLUDED.key_bytes_enc,
@@ -392,7 +401,9 @@ async def _insert_state_keys(
 
             # Get the inserted state key ID
             result = await conn.fetchrow(
-                "SELECT id FROM chromium.state_keys WHERE source = $1 AND username = $2 AND browser = $3",
+                """SELECT id FROM chromium.state_keys
+                   WHERE project IS NOT DISTINCT FROM $1 AND source = $2 AND username = $3 AND browser = $4""",
+                state_key_project,
                 file_enriched.source,
                 username,
                 browser,
@@ -404,7 +415,7 @@ async def _insert_state_keys(
                     """
                     UPDATE chromium.logins
                     SET state_key_id = $1
-                    WHERE source = $2 AND username = $3 AND browser = $4
+                    WHERE project IS NOT DISTINCT FROM $5 AND source = $2 AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                 """,
@@ -412,13 +423,14 @@ async def _insert_state_keys(
                     file_enriched.source,
                     username,
                     browser,
+                    state_key_project,
                 )
 
                 cookies_updated = await conn.execute(
                     """
                     UPDATE chromium.cookies
                     SET state_key_id = $1
-                    WHERE source = $2 AND username = $3 AND browser = $4
+                    WHERE project IS NOT DISTINCT FROM $5 AND source = $2 AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                 """,
@@ -426,6 +438,7 @@ async def _insert_state_keys(
                     file_enriched.source,
                     username,
                     browser,
+                    state_key_project,
                 )
 
                 logger.info(
@@ -444,7 +457,9 @@ async def _insert_state_keys(
         # Cookies/Login Data processed before this Local State were stored encrypted. Decrypt them now; otherwise
         # they would wait for an unrelated masterkey upload.
         if key_is_decrypted or app_bound_key_is_decrypted:
-            await retry_decrypt_chromium_data_for_state_key(file_enriched.source, username, browser, asyncpg_pool)
+            await retry_decrypt_chromium_data_for_state_key(
+                file_enriched.source, username, browser, asyncpg_pool, project=state_key_project
+            )
 
         return serializable_data
 
@@ -481,7 +496,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
     async with asyncpg_pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT id, source, username, browser,
+            SELECT id, project, source, username, browser,
                    key_masterkey_guid, key_bytes_enc, key_bytes_dec, key_is_decrypted,
                    app_bound_key_enc, app_bound_key_system_masterkey_guid,
                    app_bound_key_user_masterkey_guid, app_bound_key_system_dec,
@@ -497,6 +512,8 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
             return result
 
         _record_id = row["id"]  # noqa: F841
+        # Keys are only looked up within the state key's own project
+        state_key_project = row["project"]
         source = row["source"]
         username = row["username"]
         browser = row["browser"]
@@ -521,7 +538,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
 
                 dpapi_blob = Blob.from_bytes(dpapi_blob_bytes)
                 try:
-                    key_bytes_dec = await dpapi_manager.decrypt_blob(dpapi_blob)
+                    key_bytes_dec = await dpapi_manager.decrypt_blob(dpapi_blob, project=state_key_project)
                     if key_bytes_dec:
                         key_is_decrypted = True
                         result["decrypted_v1"] = True
@@ -564,7 +581,9 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     dpapi_portion = app_bound_key_enc[4:]
                     system_blob = Blob.from_bytes(dpapi_portion)
                     try:
-                        app_bound_key_system_dec = await dpapi_manager.decrypt_blob(system_blob)
+                        app_bound_key_system_dec = await dpapi_manager.decrypt_blob(
+                            system_blob, project=state_key_project
+                        )
                         if app_bound_key_system_dec:
                             result["decrypted_abe_stage1"] = True
                             logger.debug(
@@ -610,13 +629,13 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
             try:
                 user_blob = Blob.from_bytes(app_bound_key_system_dec)
                 try:
-                    abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob)
+                    abe_blob_bytes = await dpapi_manager.decrypt_blob(user_blob, project=state_key_project)
                     if abe_blob_bytes:
                         # Store the intermediate value after USER key decryption
                         app_bound_key_user_dec = abe_blob_bytes
 
                         # Get chrome_key from database
-                        chromekey = await _get_chromekey_from_source(source, asyncpg_pool)
+                        chromekey = await _get_chromekey_from_source(source, asyncpg_pool, project=state_key_project)
 
                         # Always attempt to parse the ABE blob (works for v2 without chromekey)
                         abe_parsed = parse_abe_blob(abe_blob_bytes, chromekey)
@@ -707,7 +726,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     """
                     UPDATE chromium.logins
                     SET state_key_id = $1
-                    WHERE source = $2 AND username = $3 AND browser = $4
+                    WHERE project IS NOT DISTINCT FROM $5 AND source = $2 AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                     """,
@@ -715,13 +734,14 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     source,
                     username,
                     browser,
+                    state_key_project,
                 )
 
                 cookies_updated = await conn.execute(
                     """
                     UPDATE chromium.cookies
                     SET state_key_id = $1
-                    WHERE source = $2 AND username = $3 AND browser = $4
+                    WHERE project IS NOT DISTINCT FROM $5 AND source = $2 AND username = $3 AND browser = $4
                     AND state_key_id IS NULL
                     AND encryption_type IN ('key', 'abe')
                     """,
@@ -729,6 +749,7 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
                     source,
                     username,
                     browser,
+                    state_key_project,
                 )
 
                 if logins_updated or cookies_updated:
@@ -746,12 +767,18 @@ async def retry_decrypt_state_key(state_key_id: int, dpapi_manager: DpapiManager
 
 
 async def retry_decrypt_state_keys_for_masterkey(
-    masterkey_guid: UUID, dpapi_manager: DpapiManager, asyncpg_pool: asyncpg.Pool, masterkey_type: str | None = None
+    masterkey_guid: UUID,
+    dpapi_manager: DpapiManager,
+    asyncpg_pool: asyncpg.Pool,
+    masterkey_type: str | None = None,
+    *,
+    project: str,
 ) -> dict:
-    """Find all state_keys waiting for this masterkey and try to decrypt them.
+    """Find the project's state_keys waiting for this masterkey and try to decrypt them.
 
     Args:
         masterkey_guid: The GUID of the newly available masterkey
+        project: Project the masterkey belongs to; only that project's state keys are retried
         dpapi_manager: DpapiManager instance for decryption
         asyncpg_pool: Async Postgres connection pool
         masterkey_type: Optional masterkey type ('system', 'user', 'unknown') for optimization
@@ -773,27 +800,32 @@ async def retry_decrypt_state_keys_for_masterkey(
                 # SYSTEM keys only used for v2 ABE stage 1
                 query = """
                     SELECT DISTINCT id FROM chromium.state_keys
-                    WHERE app_bound_key_system_masterkey_guid = $1
+                    WHERE project = $2
+                    AND app_bound_key_system_masterkey_guid = $1
                     AND length(app_bound_key_system_dec) = 0
                 """
-                state_key_rows = await conn.fetch(query, str(masterkey_guid))
+                state_key_rows = await conn.fetch(query, str(masterkey_guid), project)
             elif masterkey_type == "user":
                 # USER keys used for both v1 and v2 ABE stage 2
                 query = """
                     SELECT DISTINCT id FROM chromium.state_keys
-                    WHERE (key_masterkey_guid = $1 AND key_is_decrypted = FALSE)
-                    OR (app_bound_key_user_masterkey_guid = $2 AND app_bound_key_is_decrypted = FALSE)
+                    WHERE project = $3
+                    AND ((key_masterkey_guid = $1 AND key_is_decrypted = FALSE)
+                    OR (app_bound_key_user_masterkey_guid = $2 AND app_bound_key_is_decrypted = FALSE))
                 """
-                state_key_rows = await conn.fetch(query, str(masterkey_guid), str(masterkey_guid))
+                state_key_rows = await conn.fetch(query, str(masterkey_guid), str(masterkey_guid), project)
             else:
                 # Unknown type - check all possible uses
                 query = """
                     SELECT DISTINCT id FROM chromium.state_keys
-                    WHERE (key_masterkey_guid = $1 AND key_is_decrypted = FALSE)
+                    WHERE project = $4
+                    AND ((key_masterkey_guid = $1 AND key_is_decrypted = FALSE)
                     OR (app_bound_key_system_masterkey_guid = $2 AND length(app_bound_key_system_dec) = 0)
-                    OR (app_bound_key_user_masterkey_guid = $3 AND app_bound_key_is_decrypted = FALSE)
+                    OR (app_bound_key_user_masterkey_guid = $3 AND app_bound_key_is_decrypted = FALSE))
                 """
-                state_key_rows = await conn.fetch(query, str(masterkey_guid), str(masterkey_guid), str(masterkey_guid))
+                state_key_rows = await conn.fetch(
+                    query, str(masterkey_guid), str(masterkey_guid), str(masterkey_guid), project
+                )
 
             state_key_ids = [row["id"] for row in state_key_rows]
 
@@ -839,7 +871,9 @@ async def retry_decrypt_state_keys_for_masterkey(
     return result
 
 
-async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, asyncpg_pool: asyncpg.Pool) -> dict:
+async def retry_decrypt_state_keys_for_chromekey(
+    source: str, chromekey: bytes, asyncpg_pool: asyncpg.Pool, *, project: str | None
+) -> dict:
     """Find all state_keys from a source waiting for chromekey and try to decrypt them.
 
     This function handles v3 ABE decryption where the USER masterkey has already been
@@ -867,12 +901,15 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                 SELECT id, source, username, browser, app_bound_key_user_dec,
                        app_bound_key_user_masterkey_guid
                 FROM chromium.state_keys
-                WHERE source = $1
+                WHERE project IS NOT DISTINCT FROM $2
+                AND source = $1
                 AND app_bound_key_is_decrypted = FALSE
                 AND app_bound_key_user_dec IS NOT NULL
                 AND length(app_bound_key_user_dec) > 0
             """
-            state_keys = await conn.fetch(query, source)
+            state_keys = await conn.fetch(query, source, project)
+        # A chromekey only unlocks state keys of its own project
+        state_key_project = project
 
         logger.debug(
             "Found state keys waiting for chromekey",
@@ -927,7 +964,7 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                                 """
                                 UPDATE chromium.logins
                                 SET state_key_id = $1
-                                WHERE source = $2 AND username = $3 AND browser = $4
+                                WHERE project IS NOT DISTINCT FROM $5 AND source = $2 AND username = $3 AND browser = $4
                                 AND state_key_id IS NULL
                                 AND encryption_type IN ('key', 'abe')
                                 """,
@@ -935,13 +972,14 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                                 source_val,
                                 username,
                                 browser,
+                                state_key_project,
                             )
 
                             cookies_updated = await conn.execute(
                                 """
                                 UPDATE chromium.cookies
                                 SET state_key_id = $1
-                                WHERE source = $2 AND username = $3 AND browser = $4
+                                WHERE project IS NOT DISTINCT FROM $5 AND source = $2 AND username = $3 AND browser = $4
                                 AND state_key_id IS NULL
                                 AND encryption_type IN ('key', 'abe')
                                 """,
@@ -949,10 +987,13 @@ async def retry_decrypt_state_keys_for_chromekey(source: str, chromekey: bytes, 
                                 source_val,
                                 username,
                                 browser,
+                                state_key_project,
                             )
 
                         result["state_keys_decrypted"] += 1
-                        await retry_decrypt_chromium_data_for_state_key(source_val, username, browser, asyncpg_pool)
+                        await retry_decrypt_chromium_data_for_state_key(
+                            source_val, username, browser, asyncpg_pool, project=state_key_project
+                        )
 
                         logger.debug(
                             "Successfully decrypted ABE v3 with chromekey",

@@ -6,6 +6,14 @@ The system provides functionality to view extracted DPAPI master keys, domain ba
 
 Additionally, "retroactive" decryption will occur when plaintext DPAPI masterkeys are submitted (or scraped from LSASS dumps), or DPAPI masterkeys are successfully decrypted (via domain backup keys, NTLM hashes, passwords, etc.). Specifically, new plaintext masterkeys are used to decrypt Google Chromekey1's and Chromium Local State files.
 
+## Project Scoping
+
+All DPAPI key material is scoped to a project. Master keys, domain backup keys and DPAPI_SYSTEM secrets are stored for
+the project of the file they were extracted from (or the project named when credential material is submitted), and they
+only ever decrypt data from that same project. Retroactive decryption (Chromium state keys, cookies, logins and
+Chromekeys) also stays within the project of the newly available key. The same master key GUID can therefore exist
+independently in several projects, and submitting a credential to one project never decrypts another engagement's data.
+
 ## Overview
 
 Nemesis currently analyzes and manages the following DPAPI data sources:
@@ -24,7 +32,10 @@ The Nemesis frontend provides a dedicated DPAPI interface accessible through the
 
 ### Master Keys Tab
 
-The Master Keys tab displays extracted DPAPI master keys with searchable and filterable tables. Each entry includes:
+The Master Keys tab displays extracted DPAPI master keys with searchable and filterable tables (including a project
+filter). Each entry includes:
+
+- **Project**: The project the master key belongs to
 
 - **Object ID**: The object_id from the originating file
 - **Source**: The "source" label for the originating file (host, url, etc.)
@@ -38,7 +49,9 @@ The Master Keys tab displays extracted DPAPI master keys with searchable and fil
 
 ### Domain Backup Keys Tab
 
-The Domain Backup Keys tab shows extracted domain backup keys used for enterprise DPAPI recovery:
+The Domain Backup Keys tab shows extracted domain backup keys used for enterprise DPAPI recovery (filterable by project):
+
+- **Project**: The project the backup key belongs to
 
 - **Object ID**: The object_id from the originating file
 - **Source**: The "source" label for the originating file (host, url, etc.)
@@ -52,7 +65,7 @@ The Domain Backup Keys tab shows extracted domain backup keys used for enterpris
 
 ### Submit Credential Material Tab
 
-The Submit Credential Material tab provides an interface for submitting various types of credential material to decrypt existing DPAPI master keys stored in the system. This tab includes:
+The Submit Credential Material tab provides an interface for submitting various types of credential material to decrypt existing DPAPI master keys stored in the system. Every submission requires a **Project** (pre-filled with your current project); the credential is stored for that project and only decrypts that project's master keys and data. This tab includes:
 
 #### Credential Types Supported
 
@@ -114,3 +127,15 @@ DPAPI artifacts are automatically processed when:
 - Windows registry hives are uploaded (SYSTEM, SECURITY, SAM)
 - LSASS dumps are analized
 - User/system profile directories containing DPAPI folders/masterkeys are processed
+
+### Submitting Credentials via the API
+
+`POST /api/dpapi/credentials` takes the same credential types. Every request must include a non-empty `project`:
+
+```bash
+curl -k -u n:n -H 'Content-Type: application/json' https://nemesis:7443/api/dpapi/credentials \
+  -d '{"type": "dpapi_system", "project": "ASSESS-123", "value": "<80 hex characters>"}'
+```
+
+A request without `project` (or with a blank one) is rejected with HTTP 422.
+

@@ -202,15 +202,8 @@ async def test_cleanup_job_aborts_without_storage(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dpapi_kept_while_unexpired_files_remain(conn):
-    conn.fetchval_result = True
-    assert await hk.delete_expired_dpapi_data() is True
-    assert not conn.sql("DELETE FROM dpapi")
-
-
-@pytest.mark.asyncio
-async def test_dpapi_deleted_once_every_file_expired(conn):
-    conn.fetchval_result = False
+async def test_dpapi_deleted_per_project_once_its_files_expired(conn):
+    """Each project's DPAPI rows go only once that project has no unexpired files; other projects keep theirs."""
     cutoff = datetime(2026, 11, 24)
     assert await hk.delete_expired_dpapi_data(cutoff) is True
     deletes = [(s, a) for s, a in conn.executed if s.startswith("DELETE FROM dpapi")]
@@ -219,11 +212,14 @@ async def test_dpapi_deleted_once_every_file_expired(conn):
         "dpapi.domain_backup_keys",
         "dpapi.system_credentials",
     ]
-    assert all("updated_at < $1" in s and a == (cutoff,) for s, a in deletes)
-    # the live-file check covers both file tables, with the same comparison date
-    check, args = conn.executed[0]
-    assert "FROM files WHERE expiration >= $1" in check and "FROM files_enriched WHERE expiration >= $1" in check
-    assert args == (cutoff,)
+    for sql, args in deletes:
+        assert args == (cutoff,)
+        assert "d.updated_at < $1" in sql
+        # live files are matched on the DPAPI row's own project, in both file tables
+        assert "FROM files f WHERE f.project = d.project AND f.expiration >= $1" in sql
+        assert "FROM files_enriched fe WHERE fe.project = d.project AND fe.expiration >= $1" in sql
+    # no global "any unexpired file anywhere" check any more
+    assert not [s for s, _ in conn.executed if s.startswith("SELECT EXISTS")]
 
 
 @pytest.mark.asyncio
@@ -235,7 +231,7 @@ async def test_dpapi_all_mode_deletes_everything(conn):
 
 @pytest.mark.asyncio
 async def test_dpapi_failure_returns_false(conn):
-    conn.fail_on = "EXISTS"
+    conn.fail_on = "DELETE FROM dpapi.masterkeys"
     assert await hk.delete_expired_dpapi_data() is False
 
 

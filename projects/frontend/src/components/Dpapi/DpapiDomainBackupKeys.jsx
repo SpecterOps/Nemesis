@@ -34,6 +34,15 @@ const RecordRow = ({ index, style, data }) => {
         <span className="block truncate font-mono">{record.id || ''}</span>
       </div>
       <div
+        className={`px-4 flex-shrink-0 w-48 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'project' ? 'bg-green-200 dark:bg-green-800' : ''}`}
+        onDoubleClick={() => handleCellDoubleClick(record.project, 'project')}
+        title="Double-click to copy"
+      >
+        <Tooltip content={record.project || ''} side="top" align="start">
+          <span className="block truncate">{record.project || ''}</span>
+        </Tooltip>
+      </div>
+      <div
         className={`px-4 flex-shrink-0 w-96 text-sm text-gray-500 dark:text-gray-400 text-left cursor-pointer select-text transition-colors ${copiedCell === 'guid' ? 'bg-green-200 dark:bg-green-800' : ''}`}
         onDoubleClick={() => handleCellDoubleClick(record.guid, 'guid')}
         title="Double-click to copy"
@@ -93,10 +102,11 @@ const DpapiDomainBackupKeys = () => {
 
   // Filter states
   const [guidFilter, setGuidFilter] = useState(() => searchParams.get('guid') || '');
+  const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') || '');
   const [dcFilter, setDcFilter] = useState(() => searchParams.get('dc') || '');
   const [sortColumn, setSortColumn] = useState(() => {
     const col = searchParams.get('sort_column');
-    return (col === 'id' || col === 'guid' || col === 'domain_controller') ? col : 'id';
+    return ['id', 'project', 'guid', 'domain_controller'].includes(col) ? col : 'id';
   });
   const [sortDirection, setSortDirection] = useState(() => searchParams.get('sort_direction') || 'asc');
 
@@ -121,11 +131,17 @@ const DpapiDomainBackupKeys = () => {
       params.delete('dc');
     }
 
+    if (projectFilter) {
+      params.set('project', projectFilter);
+    } else {
+      params.delete('project');
+    }
+
     params.set('sort_column', sortColumn);
     params.set('sort_direction', sortDirection);
 
     setSearchParams(params, { replace: true });
-  }, [guidFilter, dcFilter, sortColumn, sortDirection, setSearchParams]);
+  }, [guidFilter, projectFilter, dcFilter, sortColumn, sortDirection, setSearchParams]);
 
   useEffect(() => {
     const buildWhereClause = () => {
@@ -140,6 +156,14 @@ const DpapiDomainBackupKeys = () => {
         conditions.push({ guid: { _ilike: pattern } });
       }
 
+      if (projectFilter) {
+        const hasWildcard = projectFilter.includes('*');
+        const pattern = hasWildcard
+          ? projectFilter.replace(/\*/g, '%')
+          : `%${projectFilter}%`;
+        conditions.push({ project: { _ilike: pattern } });
+      }
+
       if (dcFilter) {
         // If user provided wildcards, use them as-is; otherwise add wildcards around the term
         const hasWildcard = dcFilter.includes('*');
@@ -152,11 +176,10 @@ const DpapiDomainBackupKeys = () => {
       return conditions.length > 1 ? { _and: conditions } : conditions[0] || {};
     };
 
-    const buildOrderByClause = () => {
-      const orderBy = {};
-      orderBy[sortColumn] = sortDirection;
-      return orderBy;
-    };
+    // A GUID is only unique within a project, so sorts other than by id need the id tiebreaker
+    const buildOrderByClause = () => (
+      sortColumn === 'id' ? [{ id: sortDirection }] : [{ [sortColumn]: sortDirection }, { id: 'asc' }]
+    );
 
     const fetchData = async () => {
       setIsLoading(true);
@@ -171,6 +194,7 @@ const DpapiDomainBackupKeys = () => {
                 order_by: $order_by
               ) {
                 id
+                project
                 guid
                 domain_controller
               }
@@ -215,13 +239,24 @@ const DpapiDomainBackupKeys = () => {
     };
 
     fetchData();
-  }, [guidFilter, dcFilter, sortColumn, sortDirection]);
+  }, [guidFilter, projectFilter, dcFilter, sortColumn, sortDirection]);
 
   return (
     <div>
       {/* Filters */}
       <div className="p-2 border-b dark:border-gray-700 overflow-x-auto">
         <div className="flex items-center space-x-4 min-w-max">
+          <div className="flex items-center space-x-2">
+            <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+            <input
+              type="text"
+              placeholder="Filter by project"
+              className="border dark:border-gray-700 dark:bg-dark-secondary dark:text-gray-300 rounded p-2"
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+            />
+          </div>
+
           <div className="flex items-center space-x-2">
             <Search className="w-5 h-5 text-gray-500 dark:text-gray-400" />
             <input
@@ -260,6 +295,15 @@ const DpapiDomainBackupKeys = () => {
           className="flex-shrink-0 w-24"
         >
           ID
+        </SortableHeader>
+        <SortableHeader
+          column="project"
+          currentSort={sortColumn}
+          currentDirection={sortDirection}
+          onSort={handleSort}
+          className="flex-shrink-0 w-48"
+        >
+          Project
         </SortableHeader>
         <SortableHeader
           column="guid"

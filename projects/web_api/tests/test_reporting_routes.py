@@ -452,3 +452,15 @@ def test_source_report_template_untriaged_zero_is_shown_not_blank():
     html = render_source_report_html(report.model_dump())
     assert '<div class="stat-value warning">0</div>' in html
     assert '<div class="stat-value warning"></div>' not in html
+
+
+def test_source_report_dpapi_counts_are_scoped_to_the_sources_projects():
+    """DPAPI masterkeys have a project but no source: only the projects this source has files in are counted."""
+    file_rows = [(3, None, None, 0, None, None, None)]
+    finding_rows = [(0b11111, None, None, None, None, None, 0)]
+    pool = FakePool(_source_report_results(file_rows, finding_rows))
+    rr.get_source_report_data(pool, "host-a")
+    sql, params = pool.executed[4]
+    assert "FROM dpapi.masterkeys" in sql
+    assert "project IN (SELECT DISTINCT project FROM files_enriched WHERE UPPER(source) = %s)" in sql
+    assert params == ["HOST-A"]

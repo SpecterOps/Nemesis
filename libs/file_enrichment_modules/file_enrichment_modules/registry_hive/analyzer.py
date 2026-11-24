@@ -538,7 +538,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return results
 
-    async def _process_security_hive(self, security_file: str, system_file: str | None) -> dict:
+    async def _process_security_hive(self, security_file: str, system_file: str | None, *, project: str) -> dict:
         """Process SECURITY hive to extract LSA secrets using pypykatz."""
         results = {
             "lsa_secrets": [],
@@ -640,7 +640,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                                             )
 
                                             # Register the DPAPI_SYSTEM credential with the DPAPI manager
-                                            await self._register_dpapi_system_credential(machine_key, user_key)
+                                            await self._register_dpapi_system_credential(machine_key, user_key, project)
 
                                     # For NL$KM secrets, extract raw_secret
                                     elif not secret_value and "raw_secret" in secret_data:
@@ -1234,7 +1234,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             if security_object_id:
                 try:
                     with self.storage.download(security_object_id) as security_temp_file:
-                        sam_results = await self._process_security_hive(security_temp_file.name, hive_file_path)
+                        sam_results = await self._process_security_hive(
+                            security_temp_file.name, hive_file_path, project=file_enriched.project
+                        )
                         analysis_results["security_analysis"] = sam_results
                         logger.debug(f"Processed paired SECURITY hive for SYSTEM: {security_path}")
                 except Exception as e:
@@ -1256,7 +1258,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                         if hive_type == "SAM":
                             analysis_results = self._process_sam_hive(hive_file_path, system_temp_file.name)
                         else:  # SECURITY
-                            analysis_results = await self._process_security_hive(hive_file_path, system_temp_file.name)
+                            analysis_results = await self._process_security_hive(
+                                hive_file_path, system_temp_file.name, project=file_enriched.project
+                            )
                         logger.debug(f"Processed {hive_type} hive with SYSTEM bootkey")
 
                 except Exception as e:
@@ -1265,7 +1269,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                     if hive_type == "SAM":
                         analysis_results = self._process_sam_hive(hive_file_path, None)
                     else:  # SECURITY
-                        analysis_results = await self._process_security_hive(hive_file_path, None)
+                        analysis_results = await self._process_security_hive(
+                            hive_file_path, None, project=file_enriched.project
+                        )
                     logger.debug(f"Processed {hive_type} hive without SYSTEM bootkey (download error)")
 
             else:
@@ -1273,7 +1279,9 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 if hive_type == "SAM":
                     analysis_results = self._process_sam_hive(hive_file_path, None)
                 else:  # SECURITY
-                    analysis_results = await self._process_security_hive(hive_file_path, None)
+                    analysis_results = await self._process_security_hive(
+                        hive_file_path, None, project=file_enriched.project
+                    )
                 logger.debug(f"Processed {hive_type} hive without SYSTEM bootkey")
 
             # Store reference to system hive if found
@@ -1410,12 +1418,13 @@ class RegistryHiveAnalyzer(EnrichmentModule):
 
         return enrichment_result
 
-    async def _register_dpapi_system_credential(self, machine_key: bytes, user_key: bytes):
-        """Register a DPAPI_SYSTEM credential with the DPAPI manager.
+    async def _register_dpapi_system_credential(self, machine_key: bytes, user_key: bytes, project: str):
+        """Register a DPAPI_SYSTEM credential with the DPAPI manager, scoped to the hive's project.
 
         Args:
             machine_key: The machine key component (20 bytes)
             user_key: The user key component (20 bytes)
+            project: Project of the SECURITY hive; the credential only decrypts this project's masterkeys
         """
 
         try:
@@ -1428,7 +1437,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             dpapi_system_cred = DpapiSystemCredential(machine_key=machine_key, user_key=user_key)
 
             # Register with the DPAPI manager - it will automatically decrypt compatible masterkeys
-            await self.dpapi_manager.upsert_system_credential(dpapi_system_cred)
+            await self.dpapi_manager.upsert_system_credential(dpapi_system_cred, project=project)
 
             logger.info("Successfully registered DPAPI_SYSTEM credential with DPAPI manager")
 

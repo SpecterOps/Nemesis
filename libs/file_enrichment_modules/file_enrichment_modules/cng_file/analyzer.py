@@ -135,7 +135,7 @@ rule is_cng_file
             # Attempt to decrypt private properties (DPAPI blob)
             if cng_file.private_properties:
                 logger.info("Attempting to decrypt private properties DPAPI blob...")
-                await self._decrypt_private_properties(cng_file.private_properties)
+                await self._decrypt_private_properties(cng_file.private_properties, file_enriched.project)
 
             # Attempt to decrypt private key
             private_key_result = None
@@ -166,7 +166,7 @@ rule is_cng_file
             logger.exception(message="Error in CNG file processing")
             return None
 
-    async def _decrypt_private_properties(self, private_props_blob: bytes) -> None:
+    async def _decrypt_private_properties(self, private_props_blob: bytes, project: str) -> None:
         """Attempt to decrypt private properties DPAPI blob.
 
         Args:
@@ -184,7 +184,9 @@ rule is_cng_file
 
             # Attempt decryption
             try:
-                decrypted_props = await self.dpapi_manager.decrypt_blob(blob, entropy=cng_key_properties_entropy)
+                decrypted_props = await self.dpapi_manager.decrypt_blob(
+                    blob, entropy=cng_key_properties_entropy, project=project
+                )
                 logger.info(f"Successfully decrypted private properties! Size: {len(decrypted_props)} bytes")
 
                 # Try to parse decrypted properties
@@ -236,11 +238,9 @@ rule is_cng_file
                         key_bytes_dec,
                         key_is_decrypted
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT (key_masterkey_guid) DO UPDATE SET
+                    ON CONFLICT (project, key_masterkey_guid) DO UPDATE SET
                         originating_object_id = EXCLUDED.originating_object_id,
                         agent_id = EXCLUDED.agent_id,
-                        project = EXCLUDED.project,
-                        key_masterkey_guid = EXCLUDED.key_masterkey_guid,
                         key_bytes_enc = EXCLUDED.key_bytes_enc,
                         key_bytes_dec = EXCLUDED.key_bytes_dec,
                         key_is_decrypted = EXCLUDED.key_is_decrypted
@@ -267,6 +267,7 @@ rule is_cng_file
                         file_enriched.source,
                         decrypted_bytes,
                         self.asyncpg_pool,
+                        project=file_enriched.project,
                     )
                     logger.info(
                         "Completed retroactive state_key decryption for newly decrypted chromekey",
@@ -315,7 +316,9 @@ rule is_cng_file
                 final_key_material = None
 
                 try:
-                    decrypted_key = await self.dpapi_manager.decrypt_blob(blob, entropy=cng_key_blob_entropy)
+                    decrypted_key = await self.dpapi_manager.decrypt_blob(
+                        blob, entropy=cng_key_blob_entropy, project=file_enriched.project
+                    )
                     logger.info(f"Successfully decrypted private key! Size: {len(decrypted_key)} bytes")
 
                     # Check for BCRYPT_KEY_DATA_BLOB_HEADER
@@ -363,7 +366,9 @@ rule is_cng_file
                         # Attempt decryption
                         final_key_material = None
                         try:
-                            decrypted_key = await self.dpapi_manager.decrypt_blob(blob, entropy=cng_key_blob_entropy)
+                            decrypted_key = await self.dpapi_manager.decrypt_blob(
+                                blob, entropy=cng_key_blob_entropy, project=file_enriched.project
+                            )
                             logger.info(
                                 f"Successfully decrypted extracted private key! Size: {len(decrypted_key)} bytes"
                             )

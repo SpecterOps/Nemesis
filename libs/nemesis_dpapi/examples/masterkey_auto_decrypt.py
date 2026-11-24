@@ -30,6 +30,9 @@ from uuid import UUID
 from Crypto.PublicKey import RSA
 from nemesis_dpapi import DomainBackupKey, DpapiManager, EncryptionFilter, MasterKey, MasterKeyFile
 
+# DPAPI key material is scoped to a project; these examples use one.
+PROJECT = "example-project"
+
 
 def create_incorrect_backup_key(correct_key_data: bytes) -> bytes:
     """Create a valid but incorrect domain backup key by generating a new RSA key.
@@ -121,12 +124,13 @@ async def masterkeys_first_then_backup_key(mk_domain: MasterKeyFile, backup_key_
                     masterkey_type=mk_domain.masterkey_type,
                     encrypted_key_usercred=mk_domain.master_key,
                     encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes if mk_domain.domain_backup_key else None,
-                )
+                ),
+                project=PROJECT,
             )
 
         # Check initial state
-        all_keys = await dpapi.get_masterkeys()
-        decrypted_keys = await dpapi.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY)
+        all_keys = await dpapi.get_masterkeys(project=PROJECT)
+        decrypted_keys = await dpapi.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY, project=PROJECT)
         print(f"Initial state: {len(all_keys)} total, {len(decrypted_keys)} decrypted")
 
         # Add the domain backup key - this should trigger automatic decryption
@@ -137,14 +141,16 @@ async def masterkeys_first_then_backup_key(mk_domain: MasterKeyFile, backup_key_
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi.upsert_domain_backup_key(backup_key)
+        await dpapi.upsert_domain_backup_key(backup_key, project=PROJECT)
 
         # Give the background auto-decryption task a moment to complete
         await asyncio.sleep(0.1)
 
         # Check final state - should show more decrypted keys if auto-decryption worked
-        all_keys_final = await dpapi.get_masterkeys()
-        decrypted_keys_final = await dpapi.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY)
+        all_keys_final = await dpapi.get_masterkeys(project=PROJECT)
+        decrypted_keys_final = await dpapi.get_masterkeys(
+            encryption_filter=EncryptionFilter.DECRYPTED_ONLY, project=PROJECT
+        )
         print(f"After backup key: {len(all_keys_final)} total, {len(decrypted_keys_final)} decrypted")
 
         if len(decrypted_keys_final) > len(decrypted_keys):
@@ -168,11 +174,11 @@ async def backup_key_first_then_masterkeys(
             key_data=base64.b64decode(backup_key_data["key"]),
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi2.upsert_domain_backup_key(backup_key)
+        await dpapi2.upsert_domain_backup_key(backup_key, project=PROJECT)
 
         # Check initial state (should have backup key but no masterkeys)
-        backup_keys = await dpapi2.get_backup_keys()
-        all_keys_before = await dpapi2.get_masterkeys()
+        backup_keys = await dpapi2.get_backup_keys(project=PROJECT)
+        all_keys_before = await dpapi2.get_masterkeys(project=PROJECT)
         print(f"Initial state: {len(backup_keys)} backup keys, {len(all_keys_before)} masterkeys")
 
         # Add masterkeys - these should be auto-decrypted using existing backup key
@@ -186,7 +192,8 @@ async def backup_key_first_then_masterkeys(
                     masterkey_type=mk_domain.masterkey_type,
                     encrypted_key_usercred=mk_domain.master_key,
                     encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes,
-                )
+                ),
+                project=PROJECT,
             )
 
         # Local masterkey (won't be decrypted by domain backup key)
@@ -197,15 +204,18 @@ async def backup_key_first_then_masterkeys(
                     masterkey_type=mk_local.masterkey_type,
                     encrypted_key_usercred=mk_local.master_key,
                     encrypted_key_backup=mk_local.backup_key,
-                )
+                ),
+                project=PROJECT,
             )
 
         # Give the background auto-decryption task a moment to complete
         await asyncio.sleep(0.1)
 
         # Check final state
-        all_keys_after = await dpapi2.get_masterkeys()
-        decrypted_keys_after = await dpapi2.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY)
+        all_keys_after = await dpapi2.get_masterkeys(project=PROJECT)
+        decrypted_keys_after = await dpapi2.get_masterkeys(
+            encryption_filter=EncryptionFilter.DECRYPTED_ONLY, project=PROJECT
+        )
         print(f"After adding masterkeys: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) > 0:
@@ -230,12 +240,15 @@ async def auto_decryption_disabled(mk_domain: MasterKeyFile, backup_key_data: di
                     masterkey_type=mk_domain.masterkey_type,
                     encrypted_key_usercred=mk_domain.master_key,
                     encrypted_key_backup=mk_domain.domain_backup_key.raw_bytes,
-                )
+                ),
+                project=PROJECT,
             )
 
         # Check state before backup key
-        all_keys_before = await dpapi_no_auto.get_masterkeys()
-        decrypted_keys_before = await dpapi_no_auto.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY)
+        all_keys_before = await dpapi_no_auto.get_masterkeys(project=PROJECT)
+        decrypted_keys_before = await dpapi_no_auto.get_masterkeys(
+            encryption_filter=EncryptionFilter.DECRYPTED_ONLY, project=PROJECT
+        )
         print(f"Before backup key: {len(all_keys_before)} total, {len(decrypted_keys_before)} decrypted")
 
         # Add backup key - should NOT trigger auto-decryption
@@ -247,12 +260,14 @@ async def auto_decryption_disabled(mk_domain: MasterKeyFile, backup_key_data: di
             key_data=incorrect_key_data,
             domain_controller=backup_key_data["dc"],
         )
-        await dpapi_no_auto.upsert_domain_backup_key(backup_key_disabled)
+        await dpapi_no_auto.upsert_domain_backup_key(backup_key_disabled, project=PROJECT)
         await asyncio.sleep(0.1)
 
         # Check state after backup key
-        all_keys_after = await dpapi_no_auto.get_masterkeys()
-        decrypted_keys_after = await dpapi_no_auto.get_masterkeys(encryption_filter=EncryptionFilter.DECRYPTED_ONLY)
+        all_keys_after = await dpapi_no_auto.get_masterkeys(project=PROJECT)
+        decrypted_keys_after = await dpapi_no_auto.get_masterkeys(
+            encryption_filter=EncryptionFilter.DECRYPTED_ONLY, project=PROJECT
+        )
         print(f"After backup key: {len(all_keys_after)} total, {len(decrypted_keys_after)} decrypted")
 
         if len(decrypted_keys_after) == len(decrypted_keys_before):
