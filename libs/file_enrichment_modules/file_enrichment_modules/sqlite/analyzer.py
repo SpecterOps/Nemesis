@@ -8,6 +8,7 @@ from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
+from common.untrusted_sqlite import read_untrusted_sqlite_async
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
@@ -36,16 +37,21 @@ def safe_str_conversion(value: Any) -> str:
     return str(value)
 
 
+def quote_identifier(name: str) -> str:
+    """Quote a table name read from the file so it can't change the meaning of the query."""
+    return '"' + name.replace('"', '""') + '"'
+
+
 def get_table_data(cursor: sqlite3.Cursor, table: str, sample_size: int = 3) -> dict:
     """Get schema and sample data for a single table."""
     try:
         # Get columns
-        col_data = cursor.execute(f"PRAGMA table_info({table});").fetchall()
+        col_data = cursor.execute(f"PRAGMA table_info({quote_identifier(table)});").fetchall()
         columns = [c[1] for c in col_data]
         column_types = [c[2] for c in col_data]
 
         # Get sample rows with proper type handling
-        cursor.execute(f"SELECT * FROM {table} LIMIT {sample_size};")
+        cursor.execute(f"SELECT * FROM {quote_identifier(table)} LIMIT {sample_size};")
         raw_data = cursor.fetchall()
 
         # Convert each value safely to string
@@ -56,6 +62,8 @@ def get_table_data(cursor: sqlite3.Cursor, table: str, sample_size: int = 3) -> 
 
         return {"schema": columns, "column_types": column_types, "data": rows}
     except sqlite3.OperationalError as e:
+        if str(e) == "interrupted":
+            raise  # the time budget ran out; stop reading the rest of the database
         logger.warning(f"Error getting data for table {table}: {str(e)}")
         return {"schema": [], "column_types": [], "data": [], "error": str(e)}
 
@@ -93,6 +101,15 @@ def format_sqlite_data(database_data: dict) -> str:
     return "\n".join(output)
 
 
+def read_database(conn: sqlite3.Connection) -> dict:
+    """Schema and sample rows of every table in the database."""
+    # Handle binary data properly to avoid UTF-8 decode errors
+    conn.text_factory = lambda x: x.decode("utf-8", errors="replace") if isinstance(x, bytes) else x
+    cursor = conn.cursor()
+    tables = [t[0] for t in cursor.execute("SELECT name FROM sqlite_master WHERE type='table';").fetchall()]
+    return {table: get_table_data(cursor, table) for table in tables}
+
+
 class SqliteParser(EnrichmentModule):
     name: str = "sqlite_parser"
     dependencies: list[str] = []
@@ -113,7 +130,7 @@ class SqliteParser(EnrichmentModule):
         )
         return should_run and not file_enriched.is_plaintext
 
-    def _analyze_sqlite_database(self, file_path: str, file_enriched) -> EnrichmentResult | None:
+    async def _analyze_sqlite_database(self, file_path: str, file_enriched) -> EnrichmentResult | None:
         """Analyze SQLite database file and generate enrichment result.
 
         Args:
@@ -126,22 +143,8 @@ class SqliteParser(EnrichmentModule):
         enrichment_result = EnrichmentResult(module_name=self.name, dependencies=self.dependencies)
 
         try:
-            # Connect to the SQLite database
-            conn = sqlite3.connect(file_path)
-            # Handle binary data properly to avoid UTF-8 decode errors
-            conn.text_factory = lambda x: x.decode("utf-8", errors="replace") if isinstance(x, bytes) else x
-            cursor = conn.cursor()
-
-            # Get all tables
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [t[0] for t in cursor.fetchall()]
-
-            # Process each table
-            database_data = {}
-            for table in tables:
-                database_data[table] = get_table_data(cursor, table)
-
-            conn.close()
+            # The collected database is untrusted: read it read-only, time-limited and off the event loop
+            database_data = await read_untrusted_sqlite_async(file_path, read_database)
             # Store the raw parsed data
             enrichment_result.results = database_data
 
@@ -185,10 +188,10 @@ class SqliteParser(EnrichmentModule):
 
             # Use provided file_path if available, otherwise download
             if file_path:
-                return self._analyze_sqlite_database(file_path, file_enriched)
+                return await self._analyze_sqlite_database(file_path, file_enriched)
             else:
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    return self._analyze_sqlite_database(temp_file.name, file_enriched)
+                    return await self._analyze_sqlite_database(temp_file.name, file_enriched)
 
         except Exception:
             logger.exception(message="Error processing SQLite database")

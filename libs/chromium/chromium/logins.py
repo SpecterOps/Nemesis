@@ -6,6 +6,7 @@ import asyncpg
 from common.logger import get_logger
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
+from common.untrusted_sqlite import read_untrusted_sqlite_async, require_tables
 from nemesis_dpapi import Blob, DpapiManager
 
 from .helpers import (
@@ -64,6 +65,16 @@ async def process_chromium_logins(
     logger.debug("Completed processing Chromium Login Data", object_id=object_id)
 
 
+def _read_login_rows(conn: sqlite3.Connection) -> list[tuple]:
+    conn.text_factory = bytes  # Get raw bytes, we'll handle text decoding manually
+    require_tables(conn, "logins")
+    return conn.execute("""
+        SELECT origin_url, username_value, signon_realm, date_created,
+               date_last_used, date_password_modified, times_used, password_value
+        FROM logins
+    """).fetchall()
+
+
 async def _insert_logins(
     file_enriched,
     username: str | None,
@@ -75,18 +86,7 @@ async def _insert_logins(
     """Extract logins from Login Data database and insert into chromium.logins table using asyncpg."""
     assert asyncpg_pool is not None, "asyncpg_pool is required"
     try:
-        # Read from SQLite
-        with sqlite3.connect(db_path) as conn:
-            conn.text_factory = bytes  # Get raw bytes, we'll handle text decoding manually
-            cursor = conn.cursor()
-
-            # Query logins table
-            cursor.execute("""
-                SELECT origin_url, username_value, signon_realm, date_created,
-                       date_last_used, date_password_modified, times_used, password_value
-                FROM logins
-            """)
-            rows = cursor.fetchall()
+        rows = await read_untrusted_sqlite_async(db_path, _read_login_rows)
 
         if not rows:
             return

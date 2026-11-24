@@ -6,6 +6,7 @@ import asyncpg
 from common.logger import get_logger
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
+from common.untrusted_sqlite import read_untrusted_sqlite_async, require_tables
 from nemesis_dpapi import Blob, DpapiManager
 
 from .helpers import (
@@ -75,6 +76,17 @@ def _translate_samesite(samesite_int: int) -> str:
     return samesite_map.get(samesite_int, "Unknown")
 
 
+def _read_cookie_rows(conn: sqlite3.Connection) -> list[tuple]:
+    conn.text_factory = bytes  # Get raw bytes, we'll handle text decoding manually
+    require_tables(conn, "cookies")
+    return conn.execute("""
+        SELECT host_key, name, path, creation_utc, expires_utc, last_access_utc,
+               last_update_utc, is_secure, is_httponly, is_persistent, samesite,
+               source_port, encrypted_value
+        FROM cookies
+    """).fetchall()
+
+
 async def _insert_cookies(
     file_enriched,
     username: str | None,
@@ -86,19 +98,7 @@ async def _insert_cookies(
     """Extract cookies from Cookies database and insert into chromium.cookies table."""
     assert asyncpg_pool is not None, "asyncpg_pool is required"
     try:
-        # Read from SQLite
-        with sqlite3.connect(db_path) as conn:
-            conn.text_factory = bytes  # Get raw bytes, we'll handle text decoding manually
-            cursor = conn.cursor()
-
-            # Query cookies table
-            cursor.execute("""
-                SELECT host_key, name, path, creation_utc, expires_utc, last_access_utc,
-                       last_update_utc, is_secure, is_httponly, is_persistent, samesite,
-                       source_port, encrypted_value
-                FROM cookies
-            """)
-            rows = cursor.fetchall()
+        rows = await read_untrusted_sqlite_async(db_path, _read_cookie_rows)
 
         if not rows:
             return

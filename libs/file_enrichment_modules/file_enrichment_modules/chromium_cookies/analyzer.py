@@ -11,6 +11,7 @@ from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
+from common.untrusted_sqlite import read_untrusted_sqlite_async, require_tables
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 if TYPE_CHECKING:
@@ -19,6 +20,31 @@ if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)
+
+
+def _read_report_data(conn: sqlite3.Connection) -> dict:
+    conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
+    require_tables(conn, "cookies")
+    now_chromium = int((datetime.now(UTC).timestamp() - 11644473600) * 1000000)
+    return {
+        "cookie_count": conn.execute("SELECT COUNT(*) FROM cookies").fetchone()[0],
+        # Count of non-expired cookies at time of processing
+        "non_expired_count": conn.execute(
+            "SELECT COUNT(*) FROM cookies WHERE expires_utc IS NULL OR expires_utc > ?", (now_chromium,)
+        ).fetchone()[0],
+        "recent": conn.execute("""
+            SELECT host_key, name, last_access_utc
+            FROM cookies
+            ORDER BY last_access_utc DESC
+            LIMIT 10
+        """).fetchall(),
+        "export": conn.execute("""
+            SELECT creation_utc, host_key, source_port, path, name, expires_utc,
+                   last_access_utc, last_update_utc, is_secure, is_httponly,
+                   is_persistent, samesite
+            FROM cookies
+        """).fetchall(),
+    }
 
 
 class ChromeCookiesParser(EnrichmentModule):
@@ -105,49 +131,30 @@ rule Chrome_Cookies_Tables
             sqlite3.register_adapter(bytes, adapt_bytes)
             sqlite3.register_converter("BLOB", convert_bytes)
 
+            # The collected database is untrusted: read it read-only, time-limited and off the event loop
             if file_path:
-                # Use provided file path
-                conn = sqlite3.connect(file_path, detect_types=sqlite3.PARSE_DECLTYPES)
+                data = await read_untrusted_sqlite_async(
+                    file_path, _read_report_data, detect_types=sqlite3.PARSE_DECLTYPES
+                )
             else:
-                # Fallback to downloading the file itself
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    conn = sqlite3.connect(temp_file.name, detect_types=sqlite3.PARSE_DECLTYPES)
-
-            # Set text factory to handle non-UTF8 strings
-            conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
-            cursor = conn.cursor()
+                    data = await read_untrusted_sqlite_async(
+                        temp_file.name, _read_report_data, detect_types=sqlite3.PARSE_DECLTYPES
+                    )
 
             # Generate summary report
             report_lines = []
 
             # Cookies summary
-            cursor.execute("SELECT COUNT(*) FROM cookies")
-            cookie_count = cursor.fetchone()[0]
             report_lines.append("# Chrome Cookies Summary")
-            report_lines.append(f"\nTotal cookies: {cookie_count}")
-
-            # Count of non-expired cookies at time of processing
-            cursor.execute(
-                """
-                SELECT COUNT(*) FROM cookies
-                WHERE expires_utc IS NULL OR expires_utc > ?
-            """,
-                (int((datetime.now(UTC).timestamp() - 11644473600) * 1000000),),
-            )
-            non_expired_count = cursor.fetchone()[0]
-            report_lines.append(f"Non-expired cookies (at time of processing): {non_expired_count}")
+            report_lines.append(f"\nTotal cookies: {data['cookie_count']}")
+            report_lines.append(f"Non-expired cookies (at time of processing): {data['non_expired_count']}")
 
             # Most recently accessed cookies
-            cursor.execute("""
-                SELECT host_key, name, last_access_utc
-                FROM cookies
-                ORDER BY last_access_utc DESC
-                LIMIT 10
-            """)
             report_lines.append("\n## Most Recently Accessed Cookies")
             report_lines.append("\n| Last Access Time | Host | Cookie Name |")
             report_lines.append("| ---------------- | ---- | ----------- |")
-            for host_key, name, last_access_utc in cursor.fetchall():
+            for host_key, name, last_access_utc in data["recent"]:
                 last_access_iso = convert_chromium_timestamp(last_access_utc, True)
                 # Escape pipe characters to prevent table formatting issues
                 safe_host = host_key.replace("|", "\\|") if host_key else ""
@@ -173,12 +180,6 @@ rule Chrome_Cookies_Tables
                 )
 
             # Export cookies table
-            cursor.execute("""
-                SELECT creation_utc, host_key, source_port, path, name, expires_utc,
-                       last_access_utc, last_update_utc, is_secure, is_httponly,
-                       is_persistent, samesite
-                FROM cookies
-            """)
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_cookies:
                 writer = csv.writer(tmp_cookies)
                 writer.writerow(
@@ -197,7 +198,7 @@ rule Chrome_Cookies_Tables
                         "samesite",
                     ]
                 )
-                for row in cursor:
+                for row in data["export"]:
                     # Convert Chromium timestamps to ISO format
                     creation_utc = convert_chromium_timestamp(row[0], True) if row[0] else None
                     expires_utc = convert_chromium_timestamp(row[5], True) if row[5] else None
@@ -234,7 +235,6 @@ rule Chrome_Cookies_Tables
                     )
                 )
 
-            conn.close()
             enrichment_result.transforms = transforms
             return enrichment_result
 

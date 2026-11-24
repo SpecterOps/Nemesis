@@ -13,12 +13,34 @@ from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
+from common.untrusted_sqlite import read_untrusted_sqlite_async, require_tables
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 if TYPE_CHECKING:
     from nemesis_dpapi import DpapiManager
 
 logger = get_logger(__name__)
+
+
+def _read_report_data(conn: sqlite3.Connection) -> dict:
+    conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
+    require_tables(conn, "logins")
+    return {
+        "login_count": conn.execute("SELECT COUNT(*) FROM logins").fetchone()[0],
+        # Count of logins with non-empty password_value
+        "password_count": conn.execute("SELECT COUNT(*) FROM logins WHERE password_value IS NOT NULL").fetchone()[0],
+        "recent": conn.execute("""
+            SELECT origin_url, username_value, date_last_used
+            FROM logins
+            ORDER BY date_last_used DESC
+            LIMIT 10
+        """).fetchall(),
+        "export": conn.execute("""
+            SELECT origin_url, username_value, signon_realm, date_created,
+                   date_last_used, date_password_modified, times_used
+            FROM logins
+        """).fetchall(),
+    }
 
 
 class ChromeLoginsParser(EnrichmentModule):
@@ -105,43 +127,30 @@ rule Chrome_Logins_Tables
             sqlite3.register_adapter(bytes, adapt_bytes)
             sqlite3.register_converter("BLOB", convert_bytes)
 
+            # The collected database is untrusted: read it read-only, time-limited and off the event loop
             if file_path:
-                # Use provided file path
-                conn = sqlite3.connect(file_path, detect_types=sqlite3.PARSE_DECLTYPES)
+                data = await read_untrusted_sqlite_async(
+                    file_path, _read_report_data, detect_types=sqlite3.PARSE_DECLTYPES
+                )
             else:
-                # Fallback to downloading the file itself
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    conn = sqlite3.connect(temp_file.name, detect_types=sqlite3.PARSE_DECLTYPES)
-
-            # Set text factory to handle non-UTF8 strings
-            conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
-            cursor = conn.cursor()
+                    data = await read_untrusted_sqlite_async(
+                        temp_file.name, _read_report_data, detect_types=sqlite3.PARSE_DECLTYPES
+                    )
 
             # Generate summary report
             report_lines = []
 
             # Logins summary
-            cursor.execute("SELECT COUNT(*) FROM logins")
-            login_count = cursor.fetchone()[0]
             report_lines.append("# Chrome Logins Summary")
-            report_lines.append(f"\nTotal logins: {login_count}")
-
-            # Count of logins with non-empty password_value
-            cursor.execute("SELECT COUNT(*) FROM logins WHERE password_value IS NOT NULL")
-            password_count = cursor.fetchone()[0]
-            report_lines.append(f"\nLogins with saved passwords: {password_count}")
+            report_lines.append(f"\nTotal logins: {data['login_count']}")
+            report_lines.append(f"\nLogins with saved passwords: {data['password_count']}")
 
             # Most recently used logins
-            cursor.execute("""
-                SELECT origin_url, username_value, date_last_used
-                FROM logins
-                ORDER BY date_last_used DESC
-                LIMIT 10
-            """)
             report_lines.append("\n## Most Recently Used Logins")
             report_lines.append("\n| Last Used Time | Origin URL | Username |")
             report_lines.append("| -------------- | ---------- | -------- |")
-            for origin_url, username_value, date_last_used in cursor.fetchall():
+            for origin_url, username_value, date_last_used in data["recent"]:
                 last_used_iso = convert_chromium_timestamp(date_last_used, True)
                 # Escape pipe characters to prevent table formatting issues
                 safe_origin = origin_url.replace("|", "\\|") if origin_url else ""
@@ -167,11 +176,6 @@ rule Chrome_Logins_Tables
                 )
 
             # Export logins table
-            cursor.execute("""
-                SELECT origin_url, username_value, signon_realm, date_created,
-                       date_last_used, date_password_modified, times_used
-                FROM logins
-            """)
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_logins:
                 writer = csv.writer(tmp_logins)
                 writer.writerow(
@@ -185,7 +189,7 @@ rule Chrome_Logins_Tables
                         "times_used",
                     ]
                 )
-                for row in cursor:
+                for row in data["export"]:
                     # Convert Chromium timestamps to ISO format
                     date_created = convert_chromium_timestamp(row[3], True) if row[3] else None
                     date_last_used = convert_chromium_timestamp(row[4], True) if row[4] else None
@@ -208,7 +212,6 @@ rule Chrome_Logins_Tables
                     )
                 )
 
-            conn.close()
             enrichment_result.transforms = transforms
             return enrichment_result
 

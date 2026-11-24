@@ -1,11 +1,13 @@
 """Chromium History file parsing and database operations."""
 
 import sqlite3
+from collections.abc import Callable
 
 import asyncpg
 from common.logger import get_logger
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
+from common.untrusted_sqlite import read_untrusted_sqlite_async, require_tables
 
 from .helpers import convert_chromium_timestamp, parse_chromium_file_path
 
@@ -46,18 +48,23 @@ async def process_chromium_history(
     logger.debug("Completed processing Chromium History", object_id=object_id)
 
 
+def _table_reader(table: str, query: str) -> Callable[[sqlite3.Connection], list[tuple]]:
+    def read(conn: sqlite3.Connection) -> list[tuple]:
+        conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
+        require_tables(conn, table)
+        return conn.execute(query).fetchall()
+
+    return read
+
+
 async def _insert_history_urls(
     object_id: str, file_enriched, username: str | None, browser: str, db_path: str, asyncpg_pool: asyncpg.Pool
 ) -> None:
     """Extract URLs from History and insert into chromium.history table."""
     try:
-        # Read from SQLite
-        with sqlite3.connect(db_path) as conn:
-            conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
-            cursor = conn.cursor()
-
-            cursor.execute("SELECT url, title, visit_count, last_visit_time FROM urls")
-            rows = cursor.fetchall()
+        rows = await read_untrusted_sqlite_async(
+            db_path, _table_reader("urls", "SELECT url, title, visit_count, last_visit_time FROM urls")
+        )
 
         if not rows:
             return
@@ -109,13 +116,10 @@ async def _insert_history_downloads(
 ) -> None:
     """Extract downloads from History and insert into chromium_downloads table."""
     try:
-        # Read from SQLite
-        with sqlite3.connect(db_path) as conn:
-            conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
-            cursor = conn.cursor()
-
-            cursor.execute("SELECT tab_url, target_path, start_time, end_time, total_bytes FROM downloads")
-            rows = cursor.fetchall()
+        rows = await read_untrusted_sqlite_async(
+            db_path,
+            _table_reader("downloads", "SELECT tab_url, target_path, start_time, end_time, total_bytes FROM downloads"),
+        )
 
         if not rows:
             return

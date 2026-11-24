@@ -9,9 +9,35 @@ from common.logger import get_logger
 from common.models import EnrichmentResult, Transform
 from common.state_helpers import get_file_enriched_async
 from common.storage import StorageMinio
+from common.untrusted_sqlite import read_untrusted_sqlite_async, require_tables
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
+
+
+def _read_report_data(conn: sqlite3.Connection) -> dict:
+    conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
+    require_tables(conn, "urls", "downloads")
+    return {
+        "url_count": conn.execute("SELECT COUNT(*) FROM urls").fetchone()[0],
+        "top_urls": conn.execute("""
+            SELECT url, visit_count
+            FROM urls
+            ORDER BY visit_count DESC
+            LIMIT 10
+        """).fetchall(),
+        "download_count": conn.execute("SELECT COUNT(*) FROM downloads").fetchone()[0],
+        "recent_downloads": conn.execute("""
+            SELECT target_path, tab_url, end_time
+            FROM downloads
+            ORDER BY end_time DESC
+            LIMIT 10
+        """).fetchall(),
+        "urls": conn.execute("SELECT url, title, visit_count, last_visit_time FROM urls").fetchall(),
+        "downloads": conn.execute(
+            "SELECT target_path, total_bytes, end_time, tab_url, mime_type FROM downloads"
+        ).fetchall(),
+    }
 
 
 class ChromeHistoryParser(EnrichmentModule):
@@ -94,56 +120,39 @@ rule Chrome_Downloads_Tables
             sqlite3.register_adapter(bytes, adapt_bytes)
             sqlite3.register_converter("BLOB", convert_bytes)
 
+            # The collected database is untrusted: read it read-only, time-limited and off the event loop
             if file_path:
-                # Use provided file path
-                conn = sqlite3.connect(file_path, detect_types=sqlite3.PARSE_DECLTYPES)
+                data = await read_untrusted_sqlite_async(
+                    file_path, _read_report_data, detect_types=sqlite3.PARSE_DECLTYPES
+                )
             else:
-                # Fallback to downloading the file itself
                 with self.storage.download(file_enriched.object_id) as temp_file:
-                    conn = sqlite3.connect(temp_file.name, detect_types=sqlite3.PARSE_DECLTYPES)
-
-            # Set text factory to handle non-UTF8 strings
-            conn.text_factory = lambda x: x.decode("utf-8", errors="replace")
-            cursor = conn.cursor()
+                    data = await read_untrusted_sqlite_async(
+                        temp_file.name, _read_report_data, detect_types=sqlite3.PARSE_DECLTYPES
+                    )
 
             # Generate summary report
             report_lines = []
 
             # URLs summary
-            cursor.execute("SELECT COUNT(*) FROM urls")
-            url_count = cursor.fetchone()[0]
             report_lines.append("# Chrome History Summary")
-            report_lines.append(f"\nTotal URLs visited: {url_count}")
+            report_lines.append(f"\nTotal URLs visited: {data['url_count']}")
 
             # Top 10 visited URLs
-            cursor.execute("""
-                SELECT url, visit_count
-                FROM urls
-                ORDER BY visit_count DESC
-                LIMIT 10
-            """)
             report_lines.append("\n## Top 10 Most Visited URLs")
             report_lines.append("\n| URL | Visit Count |")
             report_lines.append("| --- | ----------- |")
-            for url, count in cursor.fetchall():
+            for url, count in data["top_urls"]:
                 report_lines.append(f"| {url} | {count} |")
 
             # Downloads summary
-            cursor.execute("SELECT COUNT(*) FROM downloads")
-            download_count = cursor.fetchone()[0]
-            report_lines.append(f"\nTotal Downloads: {download_count}")
+            report_lines.append(f"\nTotal Downloads: {data['download_count']}")
 
             # Recent downloads
-            cursor.execute("""
-                SELECT target_path, tab_url, end_time
-                FROM downloads
-                ORDER BY end_time DESC
-                LIMIT 10
-            """)
             report_lines.append("\n## Most Recent Downloads")
             report_lines.append("\n| Time | Path | Source URL |")
             report_lines.append("| ---- | ---- | ---------- |")
-            for path, url, end_time in cursor.fetchall():
+            for path, url, end_time in data["recent_downloads"]:
                 end_time_iso = convert_chromium_timestamp(end_time, True)
                 # Escape pipe characters in paths and URLs to prevent table formatting issues
                 safe_path = path.replace("|", "\\|") if path else ""
@@ -169,14 +178,10 @@ rule Chrome_Downloads_Tables
                 )
 
             # Export URLs table
-            cursor.execute("""
-                SELECT url, title, visit_count, last_visit_time
-                FROM urls
-            """)
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_urls:
                 writer = csv.writer(tmp_urls)
                 writer.writerow(["url", "title", "visit_count", "last_visit_time"])
-                for row in cursor:
+                for row in data["urls"]:
                     writer.writerow([row[0], row[1], row[2], convert_chromium_timestamp(row[3], True)])
                 tmp_urls.flush()
                 urls_object_id = self.storage.upload_file(tmp_urls.name)
@@ -193,14 +198,10 @@ rule Chrome_Downloads_Tables
                 )
 
             # Export downloads table
-            cursor.execute("""
-                SELECT target_path, total_bytes, end_time, tab_url, mime_type
-                FROM downloads
-            """)
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="") as tmp_downloads:
                 writer = csv.writer(tmp_downloads)
                 writer.writerow(["target_path", "total_bytes", "end_time", "tab_url", "mime_type"])
-                for row in cursor:
+                for row in data["downloads"]:
                     writer.writerow([row[0], row[1], convert_chromium_timestamp(row[2], True), row[3], row[4]])
                 tmp_downloads.flush()
                 downloads_object_id = self.storage.upload_file(tmp_downloads.name)
@@ -216,7 +217,6 @@ rule Chrome_Downloads_Tables
                     )
                 )
 
-            conn.close()
             enrichment_result.transforms = transforms
             return enrichment_result
 
