@@ -117,6 +117,7 @@ install_traefik() {
         --set "ports.websecure.exposedPort=7443" \
         --set "ports.web=null" \
         --set "api.dashboard=false" \
+        --set "metrics.prometheus.service.enabled=true" \
         --set "ingressRoute.dashboard.enabled=false" \
         --set "providers.kubernetesIngress.enabled=true" \
         --set "providers.kubernetesCRD.enabled=true" \

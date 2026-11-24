@@ -178,6 +178,19 @@ for script in ("setup-cluster-k3d.sh", "setup-cluster-k3s.sh", "setup-cluster-ek
     check(f"{script}: Traefik dashboard/API disabled", '--set "api.dashboard=false"' in text)
     check(f"{script}: Traefik pinned to v3.7.20", '--set "image.tag=v3.7.20"' in text)
     check(f"{script}: Dapr scheduler serves actor placement", "--set global.scheduler.placement.enabled=true" in text)
+    check(f"{script}: Traefik metrics get a ClusterIP Service", '--set "metrics.prometheus.service.enabled=true"' in text)
+    check(f"{script}: Traefik metrics port is not exposed on the public Service", "ports.metrics.expose" not in text)
+
+# --- Prometheus pod discovery stays inside the Nemesis namespace ---
+prom_pod = find(default, "Deployment", "prometheus")["spec"]["template"]["spec"]
+check("prometheus runs as its own ServiceAccount", prom_pod.get("serviceAccountName") == "prometheus")
+check("pod discovery uses a namespaced Role, not a ClusterRole", not any(d["kind"] in ("ClusterRole", "ClusterRoleBinding") and "prometheus" in d["metadata"]["name"] for d in default))
+check("pod discovery Role only reads pods", find(default, "Role", "prometheus-pod-discovery")["rules"] == [{"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "watch"]}])
+prom_cfg = yaml.safe_load(find(default, "ConfigMap", "prometheus-config")["data"]["prometheus.yml"])
+jobs = {j["job_name"]: j for j in prom_cfg["scrape_configs"]}
+check("dapr-sidecars scrape every sidecar pod", jobs["dapr-sidecars"]["kubernetes_sd_configs"][0]["role"] == "pod")
+check("pod discovery is limited to the Nemesis namespace", all(len(sd["namespaces"]["names"]) == 1 for j in jobs.values() for sd in j.get("kubernetes_sd_configs", [])))
+check("traefik metrics come from kube-system", jobs["traefik"]["static_configs"][0]["targets"] == ["traefik-metrics.kube-system.svc.cluster.local:9100"])
 
 llm = route("PathPrefix(`/llm`)")
 check("llm route needs the Nemesis login", "nemesis-basic-auth" in mw_names(llm))

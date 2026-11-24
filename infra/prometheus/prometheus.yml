@@ -44,51 +44,39 @@ scrape_configs:
     static_configs:
       - targets: ['rabbitmq:15692']
 
+  # Per-queue depth, consumers and rates (the aggregated endpoint above has totals only)
+  - job_name: 'rabbitmq-per-object'
+    metrics_path: '/metrics/per-object'
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
   # Reserved for enterprise edition only?
   # - job_name: 'hasura'
   #   metrics_path: '/v1/metrics'
   #   static_configs:
   #     - targets: ['hasura:8080']
 
-  - job_name: 'nemesis-web-api'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['web-api:8000']
-
-  - job_name: 'nemesis-titus-scanner'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['titus-scanner:8080']
-
-  - job_name: 'nemesis-dotnet-service'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['dotnet-service:5000']
-
+  # Only file-enrichment serves app metrics (DB pool gauges). The other services have no /metrics
+  # route; their Dapr sidecars (network_mode: service:<app>) serve Dapr metrics on <app>:9090:
+  # pub/sub, service invocation, workflow and activity counts/latency.
   - job_name: 'nemesis-file-enrichment'
     metrics_path: '/metrics'
     static_configs:
       - targets: ['file-enrichment:8001']
 
-  - job_name: 'nemesis-alerting'
+  - job_name: 'dapr-sidecars'
     metrics_path: '/metrics'
     static_configs:
-      - targets: ['alerting:8000']
-
-  - job_name: 'nemesis-agents'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['agents:8000']
-
-  - job_name: 'nemesis-housekeeping'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['housekeeping:8000']
-
-  - job_name: 'nemesis-document-conversion'
-    metrics_path: '/metrics'
-    static_configs:
-      - targets: ['document-conversion:8000']
+      - targets:
+          - 'web-api:9090'
+          - 'file-enrichment:9090'
+          - 'document-conversion:9090'
+          - 'alerting:9090'
+          - 'housekeeping:9090'
+          - 'titus-scanner:9090'
+          - 'dotnet-service:9090'
+          - 'gotenberg:9090'
+          - 'agents:9090' # only with the llm profile
 
   - job_name: 'nemesis-gotenberg'
     metrics_path: '/metrics'
@@ -104,3 +92,13 @@ scrape_configs:
     metrics_path: '/metrics'
     static_configs:
       - targets: ['otel-collector:8888']
+
+  - job_name: 'grafana'
+    metrics_path: '/grafana/metrics'
+    static_configs:
+      - targets: ['grafana:3000']
+
+  - job_name: 'promtail'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['promtail:9080']

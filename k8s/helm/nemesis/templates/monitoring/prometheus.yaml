@@ -19,9 +19,10 @@ data:
         static_configs:
           - targets: ["localhost:9090"]
 
+      # Traefik runs in kube-system; the setup scripts enable its ClusterIP-only metrics Service
       - job_name: "traefik"
         static_configs:
-          - targets: ["traefik:8080"]
+          - targets: ["traefik-metrics.kube-system.svc.cluster.local:9100"]
 
       - job_name: "seaweedfs"
         metrics_path: /metrics
@@ -45,24 +46,59 @@ data:
         static_configs:
           - targets: ["rabbitmq:15692"]
 
-      - job_name: "dapr-sidecars"
+      # Per-queue depth, consumers and rates (the aggregated endpoint above has totals only)
+      - job_name: "rabbitmq-per-object"
+        metrics_path: /metrics/per-object
         static_configs:
-          - targets:
-              - "web-api:9090"
-              - "file-enrichment:9090"
-              - "document-conversion:9090"
-              - "alerting:9090"
-              - "housekeeping:9090"
-              - "titus-scanner:9090"
-              - "dotnet-service:9090"
-      {{- if .Values.llm.enabled }}
-              - "agents:9090"
-      {{- end }}
+          - targets: ["rabbitmq:15692"]
 
-      - job_name: "dapr-system"
-        static_configs:
-          - targets:
-              - "scheduler:9090"
+      # Every Dapr sidecar in the namespace, one target per pod (Services would pick a random replica)
+      - job_name: "dapr-sidecars"
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ include "nemesis.namespace" . | quote }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: dapr-metrics
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      # App metrics from pods annotated prometheus.io/scrape=true (file-enrichment: DB pool gauges)
+      - job_name: "nemesis-apps"
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [{{ include "nemesis.namespace" . | quote }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "true"
+            action: keep
+          # One target per pod, not per declared container port
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: dapr-metrics
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            regex: (.+)
+            target_label: __metrics_path__
+          - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: (.+);(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      # Dapr scheduler replicas in dapr-system (headless Service: one A record per pod)
+      - job_name: "dapr-scheduler"
+        dns_sd_configs:
+          - names: ["dapr-scheduler-server.dapr-system.svc.cluster.local"]
+            type: A
+            port: 9090
 
       - job_name: "gotenberg"
         metrics_path: /metrics
@@ -112,6 +148,7 @@ spec:
       annotations:
         dapr.io/enabled: "false"
     spec:
+      serviceAccountName: prometheus
       securityContext:
         fsGroup: 65534
         runAsUser: 65534
@@ -169,4 +206,41 @@ spec:
     - port: {{ .Values.monitoring.prometheus.port }}
       targetPort: http
       name: http
+---
+# Pod discovery for the dapr-sidecars and nemesis-apps jobs, limited to this namespace
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-pod-discovery
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-pod-discovery
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prometheus-pod-discovery
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: {{ include "nemesis.namespace" . }}
 {{- end }}
