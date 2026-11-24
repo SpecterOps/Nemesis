@@ -114,14 +114,45 @@ When omitted, the defaults are `mythic`, `stage1` (Outflank), and `cobaltstrike`
 Empty or whitespace-only IDs are rejected.
 
 Collectors keep separate LevelDB databases under `cache_db_path` (Cobalt Strike and Outflank)
-or `db.path` (Mythic). Each database is identified by the framework, server URL, project, and
+or `db.path` (Mythic). Both default to `$XDG_STATE_HOME/nemesis/connectors`
+(`~/.local/state/nemesis/connectors`). `tools/mythic_connect.sh` keeps Mythic state on the
+`nemesis-connector-state` Docker volume. Each database is identified by the framework, server URL, project, and
 agent ID, so different instances can run together without sharing download IDs or stream cursors.
 Keep those values stable across restarts. Two processes for the same instance still cannot
 open its database concurrently.
+Each connector logs the resolved path of every instance database at startup, and
+`connect-* --help` shows the default state location.
 
 After upgrading from the shared database layout, the old database is retained and new instance
 databases start empty. Previously collected downloads may be uploaded again once. Changing an
 instance's URL, project, or agent ID also starts fresh processing state.
+
+### Retries, limits and metadata
+
+Cobalt Strike and Outflank record a download as done only after Nemesis accepts it. Transient
+failures (C2 or Nemesis outages, timeouts, a file not yet in Outflank's download directory) retry
+after 5, 10, 20, 40, 80, 160, then 300 seconds. C2 404s, files over `nemesis.max_file_size`, and
+Nemesis 4xx rejections are recorded as permanent failures and not retried. Outflank downloads are
+picked up only once their transfer completes. Downloads whose beacon or implant has left the C2's
+list are still uploaded.
+
+Mythic retries transient errors, including Mythic restarts, and stops only on authentication,
+permission or schema errors. Downloads that make no progress for `sync.pending_give_up_days`
+(default 7) are given up, and at most `sync.max_pending_subscriptions` (default 10) live
+subscriptions are open at once; further pending files are polled. A periodic check picks up
+files the discovery stream skipped. Screenshots and files without a full path are named
+`/<host>/screenshots/<file>` or `<file>`.
+
+All connectors verify the C2's TLS certificate unless `--ignore-cert-errors` is set, download
+without a total timeout (a stalled read fails after 300 seconds), send the C2's collection time as
+the upload timestamp, and set expiration to that time plus `nemesis.expiration_days`.
+
+### monitor
+
+The folder monitor uploads a file once its size and modification time have not changed for about
+two seconds (or, on Linux, as soon as the writer closes it). Every file is uploaded regardless of
+its name, including temporary, partial, lock and macOS metadata files; a file renamed into place is
+uploaded under its new name. This works the same on Linux and macOS.
 
 ## Additional Tools
 

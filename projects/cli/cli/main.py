@@ -4,7 +4,7 @@ import sys
 
 import click
 from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
-from cli.config import Config, load_config
+from cli.config import Config, default_state_dir, load_config
 from cli.log import setup_logging
 from cli.monitor import monitor_main
 from cli.mythic_connector.mythic_connector import start
@@ -41,6 +41,27 @@ def apply_ignore_cert_errors(cfg: Config, ignore_cert_errors: bool) -> Config:
     if ignore_cert_errors:
         cfg.validate_https_certs = False
     return cfg
+
+
+def state_location_help(tool_name: str) -> str:
+    """Describe where a connector keeps its processing state, for the command's --help epilog."""
+    setting = "db.path" if tool_name == "mythic" else "cache_db_path"
+    return (
+        f"State: a per-instance LevelDB directory under the config's {setting} "
+        f"(default: {default_state_dir()}). The exact path is logged at startup."
+    )
+
+
+class ConnectorCommand(click.Command):
+    """Connector command whose --help epilog shows the state location as resolved when help is rendered."""
+
+    def __init__(self, *args, state_tool: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.state_tool = state_tool
+
+    def format_epilog(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        self.epilog = state_location_help(self.state_tool)
+        super().format_epilog(ctx, formatter)
 
 
 # Common options for commands that need config
@@ -88,7 +109,7 @@ def cli():
     pass
 
 
-@cli.command()
+@cli.command(cls=ConnectorCommand, state_tool="outflank")
 @connector_options("outflank")
 def connect_outflank(config: str, debug: bool, showconfig: bool, dry_run: bool, ignore_cert_errors: bool):
     """Ingest Outflank C2 data into Nemesis"""
@@ -111,7 +132,7 @@ def connect_outflank(config: str, debug: bool, showconfig: bool, dry_run: bool, 
         sys.exit(1)
 
 
-@cli.command()
+@cli.command(cls=ConnectorCommand, state_tool="mythic")
 @connector_options("mythic")
 def connect_mythic(config: str, debug: bool, showconfig: bool, dry_run: bool, ignore_cert_errors: bool) -> None:
     """Mythic Sync - Synchronize data between Mythic and Nemesis."""
@@ -130,7 +151,7 @@ def connect_mythic(config: str, debug: bool, showconfig: bool, dry_run: bool, ig
         raise click.Abort() from e
 
 
-@cli.command()
+@cli.command(cls=ConnectorCommand, state_tool="cobaltstrike")
 @connector_options("cobaltstrike")
 def connect_cobaltstrike(config: str, debug: bool, showconfig: bool, dry_run: bool, ignore_cert_errors: bool):
     """Ingest Cobalt Strike data into Nemesis"""
