@@ -28,6 +28,9 @@ CMD ["npm", "run", "dev"]
 FROM base AS bundle
 COPY --from=base /app /app/
 
+# Bundling Monaco with sourcemaps outgrows Node's default ~2 GB heap
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 # public/version.json comes from CI or tools/nemesis-ctl.sh; builds without one get a minimal
 # placeholder so the Settings page never requests a missing file
 RUN npm run build && \
