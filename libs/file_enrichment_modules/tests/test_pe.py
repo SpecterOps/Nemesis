@@ -1,9 +1,13 @@
 # pyright: reportAttributeAccessIssue=false
+import asyncio
 import os
+import time
 from unittest.mock import MagicMock, patch
 
 import lief
-from file_enrichment_modules.pe.analyzer import PEAnalyzer, parse_pe_file
+import pytest
+from file_enrichment_modules.pe import analyzer as pe_analyzer
+from file_enrichment_modules.pe.analyzer import PEAnalyzer, parse_pe_file, run_pydecipher
 
 # Get the path to the fixtures directory
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "test_files")
@@ -76,8 +80,9 @@ class TestPEAnalyzerPythonPacked:
         is_packed = analyzer._is_python_packed(minimal_pe)
         assert is_packed is False, "Should not detect normal PE as Python-packed"
 
+    @pytest.mark.asyncio
     @patch("file_enrichment_modules.pe.analyzer.StorageMinio")
-    def test_unpack_python_pe_extracts_files(self, mock_storage_class):
+    async def test_unpack_python_pe_extracts_files(self, mock_storage_class):
         """Test that _unpack_python_pe extracts Python files from PyInstaller executable."""
         mock_storage_class.return_value = MagicMock()
 
@@ -85,7 +90,7 @@ class TestPEAnalyzerPythonPacked:
         assert os.path.exists(test_file), f"Test file not found: {test_file}"
 
         analyzer = PEAnalyzer()
-        log_file, py_files, output_dir = analyzer._unpack_python_pe(test_file)
+        log_file, py_files, output_dir = await analyzer._unpack_python_pe(test_file)
 
         try:
             # Should have a log file
@@ -204,3 +209,99 @@ class TestPEFileLief:
         assert binary.header.machine == lief.PE.Header.MACHINE_TYPES.I386
         assert binary.has_imports
         assert binary.has_resources
+
+
+# Stand-in for pydecipher: forks a worker (like its process pool) and both sleep; the worker writes its PID first
+_HANGING_COMMAND = (
+    "import os, sys, time\n"
+    "pid = os.fork()\n"
+    "if pid == 0:\n"
+    "    open(sys.argv[3] + '/worker.pid', 'w').write(str(os.getpid()))\n"
+    "time.sleep(60)\n"
+)
+
+
+def _wait_until_gone(pid: int, seconds: float = 5.0) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        try:  # reap if it is our child, otherwise it lingers as a zombie of init
+            os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            pass
+        time.sleep(0.05)
+    return False
+
+
+async def _worker_pid(output_dir, seconds: float = 5.0) -> int:
+    path = output_dir / "worker.pid"
+    for _ in range(int(seconds / 0.05)):
+        if path.exists() and path.read_text():
+            return int(path.read_text())
+        await asyncio.sleep(0.05)
+    raise AssertionError("worker never started")
+
+
+class TestRunPydecipher:
+    """pydecipher runs in its own process group so a hung unpack cannot block or outlive the caller."""
+
+    @pytest.mark.asyncio
+    async def test_timeout_kills_pydecipher_and_its_workers(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(pe_analyzer, "_PYDECIPHER_COMMAND", _HANGING_COMMAND)
+        run = asyncio.create_task(run_pydecipher("in.exe", str(tmp_path), timeout=2))
+        worker = await _worker_pid(tmp_path)
+
+        with pytest.raises(TimeoutError):
+            await run
+        assert _wait_until_gone(worker), "pool worker survived the timeout"
+
+    @pytest.mark.asyncio
+    async def test_cancellation_kills_pydecipher_and_its_workers(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(pe_analyzer, "_PYDECIPHER_COMMAND", _HANGING_COMMAND)
+        run = asyncio.create_task(run_pydecipher("in.exe", str(tmp_path), timeout=60))
+        worker = await _worker_pid(tmp_path)
+
+        run.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await run
+        assert _wait_until_gone(worker), "pool worker survived cancellation"
+
+    @pytest.mark.asyncio
+    async def test_failure_raises_with_stderr(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(pe_analyzer, "_PYDECIPHER_COMMAND", "import sys; sys.exit('not a PE file')")
+        with pytest.raises(RuntimeError, match="code 1: not a PE file"):
+            await run_pydecipher("in.exe", str(tmp_path), timeout=10)
+
+    @pytest.mark.asyncio
+    async def test_does_not_block_the_event_loop(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(pe_analyzer, "_PYDECIPHER_COMMAND", "import time; time.sleep(1)")
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.05)
+                ticks += 1
+
+        tick_task = asyncio.create_task(ticker())
+        await run_pydecipher("in.exe", str(tmp_path), timeout=10)
+        tick_task.cancel()
+        assert ticks >= 10
+
+    @pytest.mark.asyncio
+    @patch("file_enrichment_modules.pe.analyzer.StorageMinio")
+    async def test_unpack_failure_returns_nothing_and_cleans_up(self, mock_storage_class, monkeypatch):
+        mock_storage_class.return_value = MagicMock()
+        made = []
+        real_mkdtemp = pe_analyzer.tempfile.mkdtemp
+        monkeypatch.setattr(pe_analyzer.tempfile, "mkdtemp", lambda **kw: made.append(real_mkdtemp(**kw)) or made[-1])
+
+        async def failing(file_path, output_dir):
+            raise TimeoutError
+
+        monkeypatch.setattr(pe_analyzer, "run_pydecipher", failing)
+        assert await PEAnalyzer()._unpack_python_pe("in.exe") == (None, [], None)
+        assert not os.path.exists(made[0])

@@ -1,7 +1,10 @@
 # pyright: reportAttributeAccessIssue=false, reportCallIssue=false
 # enrichment_modules/pe_analyzer/analzyer.py
+import asyncio
 import os
 import shutil
+import signal
+import sys
 import tempfile
 import zipfile
 from glob import glob
@@ -18,6 +21,42 @@ from common.storage import StorageMinio
 from file_enrichment_modules.module_loader import EnrichmentModule
 
 logger = get_logger(__name__)
+
+# pydecipher decompiles with a pool of forked worker processes. Forking the multi-threaded enrichment service (gRPC,
+# workflow worker) can leave that pool dead and the caller blocked forever, so it runs in a fresh interpreter instead,
+# and is killed with its workers if it takes too long.
+PYDECIPHER_TIMEOUT_SECONDS = float(os.getenv("PYDECIPHER_TIMEOUT_SECONDS", "300"))
+_PYDECIPHER_COMMAND = "import sys, pydecipher.main; pydecipher.main.run(sys.argv[1:])"
+
+
+async def run_pydecipher(file_path: str, output_dir: str, timeout: float = PYDECIPHER_TIMEOUT_SECONDS) -> None:
+    """Unpack a Python-packed PE into output_dir in a separate process.
+
+    Raises TimeoutError if it runs longer than timeout and RuntimeError if it fails.
+    """
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-c",
+        _PYDECIPHER_COMMAND,
+        file_path,
+        "-o",
+        output_dir,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,  # own process group, so its pool workers can be killed with it
+    )
+    try:
+        _, stderr = await asyncio.wait_for(process.communicate(), timeout)
+    finally:
+        if process.returncode is None:  # timed out or cancelled
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            await process.wait()
+    if process.returncode != 0:
+        tail = stderr.decode(errors="replace").strip()[-500:]
+        raise RuntimeError(f"pydecipher exited with code {process.returncode}: {tail}")
 
 
 # # simpler but may have additional information we often don't care about
@@ -461,18 +500,16 @@ rule python_packed_executable
         matches = self.python_packed_rule.scan(file_bytes).matching_rules
         return len(matches) > 0
 
-    def _unpack_python_pe(self, file_path: str) -> tuple[str | None, list[str], str | None]:
+    async def _unpack_python_pe(self, file_path: str) -> tuple[str | None, list[str], str | None]:
         """Run pydecipher to unpack a Python-packed PE.
 
         Returns:
             Tuple of (log_file_path, list of .py file paths, output_dir) or (None, [], None) on failure.
             Note: Caller is responsible for cleaning up output_dir.
         """
-        import pydecipher.main
-
         output_dir = tempfile.mkdtemp(prefix="pydecipher_")
         try:
-            pydecipher.main.run([file_path, "-o", output_dir])
+            await run_pydecipher(file_path, output_dir)
 
             # Find log file (log_*.txt)
             log_files = glob(os.path.join(output_dir, "log_*.txt"))
@@ -490,9 +527,12 @@ rule python_packed_executable
             return log_file, py_files, output_dir
 
         except Exception as e:
-            logger.warning("pydecipher failed to unpack file", error=str(e), file_path=file_path)
+            logger.warning("pydecipher failed to unpack file", error=repr(e), file_path=file_path)
             shutil.rmtree(output_dir, ignore_errors=True)
             return None, [], None
+        except BaseException:  # cancelled: the process is already gone
+            shutil.rmtree(output_dir, ignore_errors=True)
+            raise
 
     def _create_unpacked_zip(self, log_file: str | None, py_files: list[str]) -> str | None:
         """Create a zip file containing the log and .py files.
@@ -545,7 +585,7 @@ rule python_packed_executable
 
             logger.info("Detected Python-packed PE, attempting to unpack", file_name=file_enriched.file_name)
 
-            log_file, py_files, output_dir = self._unpack_python_pe(file_path)
+            log_file, py_files, output_dir = await self._unpack_python_pe(file_path)
 
             if not log_file and not py_files:
                 logger.info("pydecipher produced no output files")
