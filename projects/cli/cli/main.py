@@ -28,6 +28,7 @@ def get_default_config_file(tool_name: str) -> str:
 IGNORE_CERT_ERRORS_ENVVAR = "NEMESIS_IGNORE_CERT_ERRORS"
 
 ignore_cert_errors_option = click.option(
+    "-k",
     "--ignore-cert-errors",
     is_flag=True,
     default=False,

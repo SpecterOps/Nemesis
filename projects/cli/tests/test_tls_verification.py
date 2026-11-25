@@ -184,6 +184,24 @@ class TestSubmitAndMonitorOptions:
         assert result.exit_code != 0
         mock_submit_main.assert_not_called()
 
+    @patch("cli.main.submit_main")
+    def test_submit_short_flag_disables_verification(self, mock_submit_main, tmp_path):
+        result = CliRunner().invoke(cli, ["submit", str(tmp_path), "-k"])
+        assert result.exit_code == 0, result.output
+        assert mock_submit_main.call_args.kwargs["verify_ssl"] is False
+
+    @patch("cli.main.monitor_main")
+    def test_monitor_short_flag_disables_verification(self, mock_monitor_main, tmp_path):
+        result = CliRunner().invoke(cli, ["monitor", str(tmp_path), "-k"])
+        assert result.exit_code == 0, result.output
+        assert mock_monitor_main.call_args.kwargs["verify_ssl"] is False
+
+    @pytest.mark.parametrize("command", ["connect-mythic", "connect-outflank", "connect-cobaltstrike"])
+    def test_connectors_accept_short_flag(self, command):
+        result = CliRunner().invoke(cli, [command, "--help"])
+        assert result.exit_code == 0, result.output
+        assert "-k, --ignore-cert-errors" in result.output
+
     @patch("cli.main.monitor_main")
     def test_monitor_verifies_by_default(self, mock_monitor_main, tmp_path):
         result = CliRunner().invoke(cli, ["monitor", str(tmp_path)])
@@ -198,7 +216,7 @@ class TestSubmitAndMonitorOptions:
 
     def test_help_documents_flag_and_envvar(self):
         result = CliRunner().invoke(cli, ["submit", "--help"])
-        assert "--ignore-cert-errors" in result.output
+        assert "-k, --ignore-cert-errors" in result.output
         assert IGNORE_CERT_ERRORS_ENVVAR in result.output
 
 

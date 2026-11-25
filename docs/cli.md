@@ -52,7 +52,7 @@ self-signed certificate (`infra/traefik/certs/server.crt`). The safest way to us
 explicitly with a CA file (below). Otherwise you must either install a trusted certificate or opt out of verification
 using either:
 
-- the `--ignore-cert-errors` flag (available on `submit`, `monitor`, `connect-mythic`, `connect-outflank`, and
+- the `-k`/`--ignore-cert-errors` flag (available on `submit`, `monitor`, `connect-mythic`, `connect-outflank`, and
   `connect-cobaltstrike`), or
 - the `NEMESIS_IGNORE_CERT_ERRORS=1` environment variable. The `./tools/*.sh` helper scripts forward this variable into
   the container.
@@ -183,7 +183,7 @@ Options:
 | `--source`    | `unknown://unknown`   | Source name (e.g., 'host://HOST1' or 'https://domain.com') for metadata; see note below |
 | `--agent-id`  | `submit<user>@<host>` | Agent ID for metadata                                                   |
 | `--debug`     | `false`               | Enable debug logging                                                    |
-| `--ignore-cert-errors` | `false`      | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
+| `-k`, `--ignore-cert-errors` | `false`      | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
 | `--ca-file`            | system store | PEM file of CAs to trust for Nemesis (env: `NEMESIS_CA_FILE`) |
 
 **Source:** every file Nemesis stores has a source. When `--source` is omitted the CLI logs a warning and Nemesis records
@@ -280,7 +280,7 @@ uv run python -m cli monitor /path/to/directory
 | `--workers`      | `10`                   | Number of upload threads for initial submission                         |
 | `--only-monitor` | `false`                | Skip existing files, only monitor for new ones                          |
 | `--debug`        | `false`                | Enable debug logging                                                    |
-| `--ignore-cert-errors` | `false`          | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
+| `-k`, `--ignore-cert-errors` | `false`          | Skip HTTPS certificate verification (env: `NEMESIS_IGNORE_CERT_ERRORS`) |
 | `--ca-file`            | system store     | PEM file of CAs to trust for Nemesis (env: `NEMESIS_CA_FILE`) |
 
 
