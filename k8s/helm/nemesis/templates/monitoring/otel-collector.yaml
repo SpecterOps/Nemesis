@@ -25,13 +25,26 @@ data:
         limit_percentage: 80
         spike_limit_percentage: 25
         check_interval: 1s
+      # Spans with no diagnostic value that would otherwise be most of the stored traces
+      filter/noise:
+        error_mode: ignore
+        traces:
+          span:
+            # Dapr workflow worker acks and handshakes (zero-length gRPC calls, one trace each)
+            - 'IsMatch(name, "^/TaskHubSidecarService/(CompleteActivityTask|CompleteOrchestratorTask|Hello)$")'
+            # Secret lookups (mostly at startup)
+            - 'name == "/dapr.proto.runtime.v1.Dapr/GetSecret"'
+            # Workflow completion waits outside any request (background slot holders)
+            - 'IsRootSpan() and name == "/TaskHubSidecarService/WaitForInstanceCompletion"'
+            # asyncpg's connection reset when a connection returns to the pool
+            - 'IsRootSpan() and IsMatch(attributes["db.statement"], "^SELECT pg_advisory_unlock_all")'
       batch:
         timeout: 5s
         send_batch_size: 512
         send_batch_max_size: 1024
 
     exporters:
-      otlp/jaeger:
+      otlp_grpc/jaeger:
         endpoint: "jaeger:4317"
         tls:
           insecure: true
@@ -49,8 +62,8 @@ data:
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [memory_limiter, batch]
-          exporters: [otlp/jaeger]
+          processors: [memory_limiter, filter/noise, batch]
+          exporters: [otlp_grpc/jaeger]
 ---
 apiVersion: apps/v1
 kind: Deployment

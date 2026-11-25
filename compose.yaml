@@ -909,7 +909,8 @@ services:
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./infra/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
-    depends_on: [jaeger]
+    depends_on:
+      jaeger: { condition: service_healthy }
 
   jaeger:
     profiles: ["monitoring"]
@@ -922,7 +923,6 @@ services:
         reservations:
           memory: 1G
     environment:
-      - QUERY_BASE_PATH=/jaeger
       - GOGC=80
     volumes:
       - ./infra/jaeger/jaeger-config.yaml:/etc/jaeger/config.yaml

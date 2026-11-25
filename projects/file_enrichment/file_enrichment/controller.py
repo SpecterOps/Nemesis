@@ -36,7 +36,7 @@ from .subscriptions.bulk_enrichment import bulk_enrichment_subscription_handler
 from .subscriptions.dotnet import dotnet_subscription_handler
 from .subscriptions.file import file_subscription_handler, start_workers, stop_workers
 from .subscriptions.titus import titus_subscription_handler
-from .tracing import get_trace_injector
+from .tracing import setup_tracing
 from .workflow import initialize_enrichment_modules
 from .workflow_manager import WorkflowManager
 
@@ -106,7 +106,7 @@ async def lifespan(app: FastAPI):
 
     async with AsyncExitStack() as stack:
         # One client for the process: each new client checks sidecar health synchronously and opens a gRPC channel
-        dapr_client = await stack.enter_async_context(DaprClient(headers_callback=get_trace_injector()))
+        dapr_client = await stack.enter_async_context(DaprClient())
         global_vars.dapr_client = dapr_client
         global_vars.async_workflow_client = AsyncDaprWorkflowClient(
             logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
@@ -201,6 +201,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+setup_tracing(app)  # before the lifespan opens gRPC channels
 dapr_app = DaprApp(app)
 
 # Register subscriptions

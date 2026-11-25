@@ -245,3 +245,72 @@ async def test_schedule_failure_marks_registered_workflow_failed(monkeypatch):
 
     status = tracking.update_status.await_args.args
     assert status[0] == "wf-1" and status[1] == "FAILED"
+
+
+# --- tracing: spans under the request span (FastAPI instrumentation continues the Dapr delivery trace) ---
+
+import file_enrichment.tracing as tracing  # noqa: E402
+from opentelemetry.instrumentation.utils import is_instrumentation_enabled  # noqa: E402
+from opentelemetry.sdk.trace import TracerProvider  # noqa: E402
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter  # noqa: E402
+
+
+@pytest.fixture
+def tracer(monkeypatch):
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    t = provider.get_tracer("test")
+    monkeypatch.setattr(tracing, "_tracer", t)
+    return SimpleNamespace(tracer=t, spans=lambda: {s.name: s for s in exporter.get_finished_spans()})
+
+
+async def deliver(tracer, evt):
+    """Call the handler inside a span standing in for the instrumented request."""
+    with tracer.tracer.start_as_current_span("request"):
+        return await sub.file_subscription_handler(evt)
+
+
+@pytest.mark.asyncio
+async def test_slot_wait_is_traced_under_the_request(env, tracer):
+    assert await deliver(tracer, event()) == sub.SUCCESS
+
+    spans = tracer.spans()
+    request, wait = spans["request"], spans["wait_for_slot"]
+    assert wait.parent.span_id == request.context.span_id
+    assert request.attributes["object_id"] == label_id("obj-1")
+    assert request.attributes["pubsub.status"] == "SUCCESS"
+
+
+@pytest.mark.asyncio
+async def test_request_span_records_drop_for_malformed_event(env, tracer):
+    bad = event()
+    del bad["data"]["object_id"]
+    assert await deliver(tracer, bad) == sub.DROP
+
+    spans = tracer.spans()
+    assert spans["request"].attributes["pubsub.status"] == "DROP"
+    assert "wait_for_slot" not in spans
+
+
+@pytest.mark.asyncio
+async def test_request_span_records_retry_when_no_slot_frees(env, tracer):
+    await sub.file_subscription_handler(event(object_id="a"))
+    await sub.file_subscription_handler(event(object_id="b"))
+    assert await deliver(tracer, event(object_id="c")) == sub.RETRY
+    assert tracer.spans()["request"].attributes["pubsub.status"] == "RETRY"
+
+
+@pytest.mark.asyncio
+async def test_slot_holder_creates_no_spans(env, tracer, monkeypatch):
+    seen = {}
+
+    async def holder(instance_id):
+        seen["instrumented"] = is_instrumentation_enabled()
+
+    monkeypatch.setattr(sub, "hold_slot_until_done", holder)
+    await deliver(tracer, event())
+    await _settle()
+    assert seen["instrumented"] is False
+    assert is_instrumentation_enabled()  # only the holder task is suppressed

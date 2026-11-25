@@ -18,9 +18,12 @@ data:
                 keys: /badger/keys
                 values: /badger/values
               ephemeral: false
+              ttl:
+                spans: 72h  # how long traces are kept
       jaeger_query:
         storage:
           traces: badger_store
+        base_path: /jaeger  # the ingress routes /jaeger here without stripping the prefix
       healthcheckv2: {}
 
     receivers:
@@ -101,8 +104,6 @@ spec:
             - "--config"
             - "/etc/jaeger/config.yaml"
           env:
-            - name: QUERY_BASE_PATH
-              value: "/jaeger"
             - name: GOGC
               value: "80"
           ports:

@@ -22,7 +22,12 @@ from common.helpers import jsonb_dumps
 from common.logger import get_logger
 from common.models import CloudEvent, File
 from fastapi import Body
+from opentelemetry import trace
+from opentelemetry.instrumentation.utils import suppress_instrumentation
+from opentelemetry.trace import Span
 from pydantic import ValidationError
+
+from ..tracing import get_tracer, set_object_id_attribute
 
 logger = get_logger(__name__)
 
@@ -116,20 +121,34 @@ async def hold_slot_until_done(instance_id: str) -> None:
         slots.release()
 
 
+async def _hold_slot_untraced(instance_id: str) -> None:
+    # The slot holder outlives the delivery; its periodic completion waits would only add noise spans
+    with suppress_instrumentation():
+        await hold_slot_until_done(instance_id)
+
+
 async def file_subscription_handler(event: dict[str, Any] = Body(...)) -> dict[str, str]:
     """Handler for incoming file events; returns a Dapr pub/sub status (SUCCESS, RETRY or DROP)."""
+    status = await _handle_file_event(event, trace.get_current_span())
+    trace.get_current_span().set_attribute("pubsub.status", status["status"])
+    return status
+
+
+async def _handle_file_event(event: dict[str, Any], span: Span) -> dict[str, str]:
     try:
         file = CloudEvent[File].model_validate(event).data
     except ValidationError as e:
         logger.error("Dropping malformed file event", event_id=event.get("id"), error=str(e))
         return DROP
+    set_object_id_attribute(span, file.object_id)
 
     if workflow_slots is None:
         logger.warning("File event received before workflow slots exist; retrying", object_id=file.object_id)
         return RETRY
 
     try:
-        await asyncio.wait_for(workflow_slots.acquire(), timeout=SLOT_WAIT_SECONDS)
+        with get_tracer().start_as_current_span("wait_for_slot"):
+            await asyncio.wait_for(workflow_slots.acquire(), timeout=SLOT_WAIT_SECONDS)
     except TimeoutError:
         logger.info("No workflow slot free; asking the broker to redeliver", object_id=file.object_id)
         return RETRY
@@ -147,7 +166,7 @@ async def file_subscription_handler(event: dict[str, Any] = Body(...)) -> dict[s
         logger.exception(message="Error scheduling workflow for file; asking for redelivery", object_id=file.object_id)
         return RETRY
 
-    task = asyncio.create_task(hold_slot_until_done(instance_id))
+    task = asyncio.create_task(_hold_slot_untraced(instance_id))
     slot_holders.add(task)
     task.add_done_callback(slot_holders.discard)
 

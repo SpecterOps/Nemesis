@@ -1,29 +1,49 @@
 # Documentation: https://opentelemetry.io/docs/collector/configuration/
+# Traces from the Dapr sidecars and instrumented apps arrive over OTLP/gRPC, are filtered and batched, and go to Jaeger.
 
 extensions:
   health_check:
     endpoint: "0.0.0.0:13133"
     path: "/health"
 
-# Defines ingestion points for traces
 receivers:
   otlp:
     protocols:
       grpc:
         endpoint: "0.0.0.0:4317"
-        tls:
-          # Disable TLS
 
+processors:
+  # prevents the collector from dying if Jaeger stalls
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
 
-# Defines where to send traces
+  # Spans with no diagnostic value that would otherwise be most of the stored traces
+  filter/noise:
+    error_mode: ignore
+    traces:
+      span:
+        # Dapr workflow worker acks and handshakes (zero-length gRPC calls, one trace each)
+        - 'IsMatch(name, "^/TaskHubSidecarService/(CompleteActivityTask|CompleteOrchestratorTask|Hello)$")'
+        # Secret lookups (mostly at startup)
+        - 'name == "/dapr.proto.runtime.v1.Dapr/GetSecret"'
+        # Workflow completion waits outside any request (background slot holders)
+        - 'IsRootSpan() and name == "/TaskHubSidecarService/WaitForInstanceCompletion"'
+        # asyncpg's connection reset when a connection returns to the pool
+        - 'IsRootSpan() and IsMatch(attributes["db.statement"], "^SELECT pg_advisory_unlock_all")'
+
+  # send smaller, more frequent batches to Jaeger
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
+
 exporters:
-  # debug: {}
-
-  otlp/jaeger:
+  otlp_grpc/jaeger:
     endpoint: "jaeger:4317"
     tls:
       insecure: true
-      insecure_skip_verify: true
     sending_queue:
       enabled: true
       num_consumers: 4
@@ -33,22 +53,6 @@ exporters:
       initial_interval: 1s
       max_interval: 30s
       max_elapsed_time: 300s
-    
-  # file:
-  #   path: /tmp/otel-collector.json
-
-processors:
-  # prevents the collector from dying if Jaeger stalls
-  memory_limiter:
-    check_interval: 1s
-    limit_percentage: 80
-    spike_limit_percentage: 25
-
-  # send smaller, more frequent batches to Jaeger
-  batch:
-    timeout: 5s
-    send_batch_size: 512
-    send_batch_max_size: 1024
 
 service:
   extensions: [health_check]
@@ -56,9 +60,8 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [otlp/jaeger]
-      # exporters: [debug, otlp]
+      processors: [memory_limiter, filter/noise, batch]
+      exporters: [otlp_grpc/jaeger]
 
   telemetry:
     metrics:

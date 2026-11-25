@@ -25,6 +25,8 @@ extensions:
             keys: "/badger/keys"
             values: "/badger/values"
           ephemeral: false
+          ttl:
+            spans: 72h  # how long traces are kept
           consistency: false
           maintenance_interval: 5m0s
           read_only: false

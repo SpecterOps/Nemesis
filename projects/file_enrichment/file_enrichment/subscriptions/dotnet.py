@@ -22,9 +22,7 @@ from common.models import (
 )
 from common.queues import FILES_NEW_FILE_TOPIC, FILES_PUBSUB
 from common.state_helpers import get_file_enriched_async
-from dapr.aio.clients import DaprClient
 from file_enrichment.activities.publish_findings import publish_alerts_for_findings
-from file_enrichment.tracing import get_trace_injector
 
 logger = get_logger(__name__)
 
@@ -164,14 +162,12 @@ async def store_dotnet_results(
                     nesting_level=(file_enriched.nesting_level or 0) + 1,
                 )
 
-                async with DaprClient(headers_callback=get_trace_injector()) as dapr_client:
-                    data = json.dumps(file_message.model_dump(exclude_unset=True, mode="json"))
-                    await dapr_client.publish_event(
-                        pubsub_name=FILES_PUBSUB,
-                        topic_name=FILES_NEW_FILE_TOPIC,
-                        data=data,
-                        data_content_type="application/json",
-                    )
+                await global_vars.get_dapr_client().publish_event(
+                    pubsub_name=FILES_PUBSUB,
+                    topic_name=FILES_NEW_FILE_TOPIC,
+                    data=json.dumps(file_message.model_dump(exclude_unset=True, mode="json")),
+                    data_content_type="application/json",
+                )
 
                 logger.info(
                     "Submitted decompiled source ZIP to Nemesis",
