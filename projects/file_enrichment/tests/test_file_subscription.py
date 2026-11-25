@@ -53,31 +53,41 @@ def event(**file_overrides):
     }
 
 
+TERMINAL = {DaprWorkflowStatus.COMPLETED, DaprWorkflowStatus.FAILED, DaprWorkflowStatus.TERMINATED, None}
+
+
 class FakeWorkflowClient:
-    """get_workflow_state returns RUNNING until finish() is called."""
+    """Async client whose wait_for_workflow_completion returns once the test sets a terminal status (None = purged)."""
 
     def __init__(self):
         self.status = DaprWorkflowStatus.RUNNING
         self.error: Exception | None = None
+        self.waits = 0
 
-    def get_workflow_state(self, instance_id, fetch_payloads=True):
-        if self.error:
-            raise self.error
-        if self.status is None:
-            return None
-        return SimpleNamespace(runtime_status=self.status)
+    async def wait_for_workflow_completion(self, instance_id, *, fetch_payloads=True, timeout_in_seconds=0):
+        self.waits += 1
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_in_seconds if timeout_in_seconds else None
+        while True:
+            if self.error:
+                raise self.error
+            if self.status in TERMINAL:
+                return None if self.status is None else SimpleNamespace(runtime_status=self.status)
+            if deadline is not None and loop.time() >= deadline:
+                raise TimeoutError("Timed-out waiting for the orchestration to complete")
+            await asyncio.sleep(0.005)
 
 
 @pytest_asyncio.fixture
 async def env(monkeypatch):
     monkeypatch.setattr(sub, "NUM_WORKERS", 2)
     monkeypatch.setattr(sub, "SLOT_WAIT_SECONDS", 0.2)
-    monkeypatch.setattr(sub, "COMPLETION_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(sub, "COMPLETION_RETRY_SECONDS", 0.01)
     monkeypatch.setattr(sub, "save_file_message", AsyncMock())
     manager = SimpleNamespace(run_workflow=AsyncMock(side_effect=lambda f: f"wf-{f.object_id}"))
     monkeypatch.setattr(global_vars, "workflow_manager", manager)
     client = FakeWorkflowClient()
-    monkeypatch.setattr(global_vars, "workflow_client", client)
+    monkeypatch.setattr(global_vars, "async_workflow_client", client)
     sub.start_workers()
     try:
         yield SimpleNamespace(manager=manager, client=client)
@@ -174,6 +184,38 @@ async def test_state_errors_keep_waiting_until_safety_timeout(env, monkeypatch):
     env.client.error = RuntimeError("sidecar restarting")
     await sub.file_subscription_handler(event())
     await _settle()
+    assert free_slots() == 2
+
+
+@pytest.mark.asyncio
+async def test_slot_released_when_wait_times_out(env, monkeypatch):
+    monkeypatch.setattr(sub, "completion_timeout_seconds", lambda: 0.1)
+    await sub.file_subscription_handler(event())
+    await asyncio.sleep(1.2)  # the wait's timeout is rounded up to a whole second
+    assert free_slots() == 2
+
+
+@pytest.mark.asyncio
+async def test_wait_error_then_success_releases_slot(env):
+    env.client.error = RuntimeError("sidecar restarting")
+    await sub.file_subscription_handler(event())
+    await _settle()
+    assert free_slots() == 1  # still waiting after the failed attempts
+    env.client.error = None
+    env.client.status = DaprWorkflowStatus.COMPLETED
+    await _settle()
+    assert free_slots() == 2
+    assert env.client.waits > 1
+
+
+@pytest.mark.asyncio
+async def test_slot_freed_without_polling_delay(env, monkeypatch):
+    """The slot frees as soon as the workflow finishes, not after a poll interval."""
+    monkeypatch.setattr(sub, "COMPLETION_RETRY_SECONDS", 60)
+    await sub.file_subscription_handler(event())
+    await asyncio.sleep(0.05)
+    env.client.status = DaprWorkflowStatus.COMPLETED
+    await asyncio.sleep(0.05)
     assert free_slots() == 2
 
 

@@ -5,6 +5,8 @@ import dapr.ext.workflow as wf
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL
 from common.storage import StorageS3
 from common.workflows.tracking_service import WorkflowTrackingService
+from dapr.aio.clients import DaprClient
+from dapr.ext.workflow.aio import DaprWorkflowClient as AsyncDaprWorkflowClient
 from dapr.ext.workflow.logger.options import LoggerOptions
 from file_enrichment_modules.module_loader import EnrichmentModule
 from file_linking import FileLinkingEngine
@@ -16,6 +18,18 @@ workflow_client = wf.DaprWorkflowClient(
         log_level=WORKFLOW_CLIENT_LOG_LEVEL,
     ),
 )
+
+# Set in the controller lifespan (both need the running event loop)
+async_workflow_client: AsyncDaprWorkflowClient | None = None
+dapr_client: DaprClient | None = None  # shared aio client (trace headers per call) for publishes from activities
+
+
+def get_dapr_client() -> DaprClient:
+    """The process-wide aio Dapr client. Use it instead of opening a client per call."""
+    if dapr_client is None:
+        raise RuntimeError("Dapr client is not initialized (set in the controller lifespan)")
+    return dapr_client
+
 
 activity_functions = {}
 storage = StorageS3()

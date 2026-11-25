@@ -19,6 +19,15 @@ from dapr.ext.workflow.workflow_state import WorkflowStatus as DaprWorkflowStatu
 logger = get_logger(__name__)
 
 
+def _is_missing_instance_error(error: grpc.RpcError) -> bool:
+    """True when Dapr reports that the workflow instance does not exist."""
+    code = error.code() if callable(getattr(error, "code", None)) else None
+    if code == grpc.StatusCode.NOT_FOUND:
+        return True
+    details = error.details() if callable(getattr(error, "details", None)) else None
+    return bool(details and "no such instance exists" in details)
+
+
 class WorkflowPurger:
     """Service for purging completed workflows from Dapr state store."""
 
@@ -269,12 +278,14 @@ class WorkflowPurger:
                 return (False, None)
 
         except grpc.RpcError as e:
-            details = e.details()
-            if details and "no such instance exists" in details:
-                # Workflow doesn't exist anymore: another instance may have already purged it
+            if _is_missing_instance_error(e):
+                # Workflow doesn't exist anymore: Dapr's retention policy or another replica already purged it
                 return (True, wf_id)
 
-            return (True, wf_id)
+            # Anything else (sidecar unavailable, deadline, ...) may be transient: leave the row unpurged so the
+            # next cycle tries again, instead of marking it purged and leaking its Dapr state
+            logger.warning("Could not verify or purge workflow; will retry", wf_id=wf_id, error=str(e))
+            return (False, None)
 
         except Exception:
             logger.exception(

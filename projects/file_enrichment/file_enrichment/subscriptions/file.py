@@ -12,6 +12,7 @@ DROP with a log, so they don't loop forever.
 """
 
 import asyncio
+import math
 import os
 from typing import Any
 
@@ -20,7 +21,6 @@ import file_enrichment.global_vars as global_vars
 from common.helpers import jsonb_dumps
 from common.logger import get_logger
 from common.models import CloudEvent, File
-from dapr.ext.workflow.workflow_state import WorkflowStatus as DaprWorkflowStatus
 from fastapi import Body
 from pydantic import ValidationError
 
@@ -30,14 +30,12 @@ logger = get_logger(__name__)
 # Configuration
 NUM_WORKERS = int(os.getenv("MAX_PARALLEL_WORKFLOWS", 5))
 SLOT_WAIT_SECONDS = float(os.getenv("WORKFLOW_SLOT_WAIT_SECONDS", 600))
-COMPLETION_POLL_SECONDS = 2.0
+COMPLETION_RETRY_SECONDS = 2.0  # wait between attempts when the completion wait itself fails
 
 # Dapr pub/sub responses
 SUCCESS = {"status": "SUCCESS"}
 RETRY = {"status": "RETRY"}
 DROP = {"status": "DROP"}
-
-TERMINAL_STATES = {DaprWorkflowStatus.COMPLETED, DaprWorkflowStatus.FAILED, DaprWorkflowStatus.TERMINATED}
 
 # Errors that retrying the same message can't fix
 PERMANENT_ERRORS: tuple[type[BaseException], ...] = (
@@ -84,32 +82,36 @@ def completion_timeout_seconds() -> float:
 
 
 async def hold_slot_until_done(instance_id: str) -> None:
-    """Keep a slot until the workflow finishes (or disappears, or the safety timeout passes), then release it."""
+    """Keep a slot until the workflow finishes (or disappears, or the safety timeout passes), then release it.
+
+    The sidecar answers the wait as soon as the workflow reaches a terminal state, so the slot is free again at once
+    (a fixed-interval poll left each slot idle for up to the poll interval after every workflow).
+    """
     assert workflow_slots is not None
     slots = workflow_slots
     loop = asyncio.get_running_loop()
     deadline = loop.time() + completion_timeout_seconds()
     try:
-        while True:
+        while (remaining := deadline - loop.time()) > 0:
+            client = global_vars.async_workflow_client
+            assert client is not None
             try:
-                state = await asyncio.to_thread(
-                    global_vars.workflow_client.get_workflow_state, instance_id, fetch_payloads=False
-                )
-            except Exception as e:
-                # State unknown for now; keep waiting until the deadline
-                logger.warning("Could not read workflow state", instance_id=instance_id, error=str(e))
-            else:
-                # None means the workflow no longer exists (already purged)
-                if state is None or state.runtime_status in TERMINAL_STATES:
-                    return
-            if loop.time() >= deadline:
-                logger.warning(
-                    "Workflow did not finish within the slot timeout; releasing its slot",
-                    instance_id=instance_id,
-                    timeout_seconds=completion_timeout_seconds(),
+                # Returns None when the workflow no longer exists (already purged)
+                await client.wait_for_workflow_completion(
+                    instance_id, fetch_payloads=False, timeout_in_seconds=max(1, math.ceil(remaining))
                 )
                 return
-            await asyncio.sleep(COMPLETION_POLL_SECONDS)
+            except TimeoutError:
+                break
+            except Exception as e:
+                # State unknown for now (e.g. sidecar restarting); keep waiting until the deadline
+                logger.warning("Could not wait for workflow completion", instance_id=instance_id, error=str(e))
+                await asyncio.sleep(min(COMPLETION_RETRY_SECONDS, max(0.0, deadline - loop.time())))
+        logger.warning(
+            "Workflow did not finish within the slot timeout; releasing its slot",
+            instance_id=instance_id,
+            timeout_seconds=completion_timeout_seconds(),
+        )
     finally:
         slots.release()
 

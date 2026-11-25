@@ -4,9 +4,6 @@ from datetime import UTC, datetime
 from common.helpers import jsonable
 from common.logger import get_logger
 from common.queues import WORKFLOW_MONITOR_COMPLETED_TOPIC, WORKFLOW_MONITOR_PUBSUB
-from dapr.aio.clients import DaprClient
-
-from .tracing import get_trace_injector
 
 logger = get_logger(__name__)
 
@@ -55,30 +52,30 @@ async def publish_workflow_completion(instance_id, completed=True):
 
         # Only publish if we have a container ID to track
         if object_id and originating_container_id:
-            async with DaprClient(headers_callback=get_trace_injector()) as client:
-                completion_data = {
-                    "object_id": object_id,
-                    "originating_container_id": originating_container_id,
-                    "workflow_id": instance_id,
-                    "completed": completed,
-                    "file_size": file_size,
-                    "timestamp": datetime.now(UTC),
-                }
+            client = global_vars.get_dapr_client()
+            completion_data = {
+                "object_id": object_id,
+                "originating_container_id": originating_container_id,
+                "workflow_id": instance_id,
+                "completed": completed,
+                "file_size": file_size,
+                "timestamp": datetime.now(UTC),
+            }
 
-                await client.publish_event(
-                    pubsub_name=WORKFLOW_MONITOR_PUBSUB,
-                    topic_name=WORKFLOW_MONITOR_COMPLETED_TOPIC,
-                    data=json.dumps(jsonable(completion_data)),
-                    data_content_type="application/json",
-                )
+            await client.publish_event(
+                pubsub_name=WORKFLOW_MONITOR_PUBSUB,
+                topic_name=WORKFLOW_MONITOR_COMPLETED_TOPIC,
+                data=json.dumps(jsonable(completion_data)),
+                data_content_type="application/json",
+            )
 
-                logger.debug(
-                    "Published workflow completion event",
-                    object_id=object_id,
-                    container_id=originating_container_id,
-                    completed=completed,
-                    workflow_id=instance_id,
-                )
+            logger.debug(
+                "Published workflow completion event",
+                object_id=object_id,
+                container_id=originating_container_id,
+                completed=completed,
+                workflow_id=instance_id,
+            )
 
     except Exception as e:
         logger.error("Error publishing workflow completion event", workflow_id=instance_id, error=str(e))

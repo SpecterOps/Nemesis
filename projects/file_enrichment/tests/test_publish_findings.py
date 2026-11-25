@@ -153,9 +153,7 @@ def wired(monkeypatch):
     )
     dapr = MagicMock()
     dapr.publish_event = AsyncMock()
-    dapr.__aenter__ = AsyncMock(return_value=dapr)
-    dapr.__aexit__ = AsyncMock(return_value=False)
-    monkeypatch.setattr(publish_findings, "DaprClient", MagicMock(return_value=dapr))
+    monkeypatch.setattr(publish_findings.global_vars, "dapr_client", dapr)
     return pool, dapr
 
 

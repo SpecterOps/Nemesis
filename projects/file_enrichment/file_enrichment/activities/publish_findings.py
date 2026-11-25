@@ -15,11 +15,9 @@ from common.models import Alert
 from common.queues import ALERTING_NEW_ALERT_TOPIC, ALERTING_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
-from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
-from ..tracing import get_trace_injector
 
 logger = get_logger(__name__)
 
@@ -120,80 +118,80 @@ async def publish_alerts_for_findings(
     )
 
     if findings:
-        async with DaprClient(headers_callback=get_trace_injector()) as client:
-            if file_enriched.path:
-                file_path = file_enriched.path
-            else:
-                file_path = "UNKNOWN"
+        client = global_vars.get_dapr_client()
+        if file_enriched.path:
+            file_path = file_enriched.path
+        else:
+            file_path = "UNKNOWN"
 
-            llm_enabled = await is_llm_enabled()
-            logger.debug(f"[publish_alerts_for_findings] llm_enabled: {llm_enabled}")
+        llm_enabled = await is_llm_enabled()
+        logger.debug(f"[publish_alerts_for_findings] llm_enabled: {llm_enabled}")
 
-            for finding in findings:
-                finding_name = finding["finding_name"]
-                category = finding["category"]
-                severity = finding["severity"]
-                origin_name = finding["origin_name"]
-                raw_data = finding["raw_data"]
-                if isinstance(raw_data, str):
-                    raw_data = json.loads(raw_data)
+        for finding in findings:
+            finding_name = finding["finding_name"]
+            category = finding["category"]
+            severity = finding["severity"]
+            origin_name = finding["origin_name"]
+            raw_data = finding["raw_data"]
+            if isinstance(raw_data, str):
+                raw_data = json.loads(raw_data)
 
-                # If LLM is enabled and this category will be triaged, skip immediate alert
-                if llm_enabled and category not in LLM_EXCLUDED_CATEGORIES:
-                    logger.debug(
-                        "Skipping immediate alert for finding - LLM triage will handle it",
-                        finding_name=finding_name,
-                        category=category,
-                        object_id=object_id,
-                    )
-                    continue
-
-                finding_message = f"- *Category:* {category} / *Severity:* {severity}\n"
-                file_message = f"- *File Path:* {helpers.sanitize_file_path(file_path)}\n"
-                nemesis_finding_url = f"{global_vars.nemesis_url}findings?object_id={file_enriched.object_id}"
-                nemesis_file_url = f"{global_vars.nemesis_url}files?object_id={file_enriched.object_id}"
-                nemesis_footer_finding = f"*<{nemesis_finding_url}|View Finding in Nemesis>* / "
-                nemesis_footer_file = f"*<{nemesis_file_url}|View File in Nemesis>*\n"
-                separator = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
-
-                rule_message = ""
-                validation_message = ""
-                try:
-                    if raw_data and finding_name.startswith("titus_"):
-                        if "match" in raw_data and "rule_name" in raw_data["match"]:
-                            rule_name = raw_data["match"]["rule_name"]
-                            rule_id = raw_data["match"].get("rule_id", "")
-                            rule_id_suffix = f" (`{rule_id}`)" if rule_id else ""
-                            rule_message = f"- *Rule name:* {rule_name}{rule_id_suffix}\n"
-                        if "match" in raw_data and raw_data["match"].get("validation_result"):
-                            vr = raw_data["match"]["validation_result"]
-                            status = vr.get("status", "undetermined")
-                            status_label = {
-                                "valid": "CONFIRMED ACTIVE",
-                                "invalid": "INACTIVE",
-                                "undetermined": "UNVERIFIED",
-                            }.get(status, "UNVERIFIED")
-                            validation_message = f"- *Validation:* {status_label}\n"
-                except (json.JSONDecodeError, KeyError, TypeError) as e:
-                    logger.warning("Error processing raw_data for titus finding", error=str(e))
-
-                body = f"{finding_message}{rule_message}{validation_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
-
-                alert = Alert(
-                    title=finding_name,
-                    body=body,
-                    service=origin_name,
+            # If LLM is enabled and this category will be triaged, skip immediate alert
+            if llm_enabled and category not in LLM_EXCLUDED_CATEGORIES:
+                logger.debug(
+                    "Skipping immediate alert for finding - LLM triage will handle it",
+                    finding_name=finding_name,
                     category=category,
-                    severity=severity,
-                    file_path=file_path,
+                    object_id=object_id,
                 )
-                await client.publish_event(
-                    pubsub_name=ALERTING_PUBSUB,
-                    topic_name=ALERTING_NEW_ALERT_TOPIC,
-                    data=json.dumps(alert.model_dump(exclude_unset=True)),
-                    data_content_type="application/json",
-                )
-                logger.debug("Published alert", alert=alert)
+                continue
+
+            finding_message = f"- *Category:* {category} / *Severity:* {severity}\n"
+            file_message = f"- *File Path:* {helpers.sanitize_file_path(file_path)}\n"
+            nemesis_finding_url = f"{global_vars.nemesis_url}findings?object_id={file_enriched.object_id}"
+            nemesis_file_url = f"{global_vars.nemesis_url}files?object_id={file_enriched.object_id}"
+            nemesis_footer_finding = f"*<{nemesis_finding_url}|View Finding in Nemesis>* / "
+            nemesis_footer_file = f"*<{nemesis_file_url}|View File in Nemesis>*\n"
+            separator = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯"
+
+            rule_message = ""
+            validation_message = ""
+            try:
+                if raw_data and finding_name.startswith("titus_"):
+                    if "match" in raw_data and "rule_name" in raw_data["match"]:
+                        rule_name = raw_data["match"]["rule_name"]
+                        rule_id = raw_data["match"].get("rule_id", "")
+                        rule_id_suffix = f" (`{rule_id}`)" if rule_id else ""
+                        rule_message = f"- *Rule name:* {rule_name}{rule_id_suffix}\n"
+                    if "match" in raw_data and raw_data["match"].get("validation_result"):
+                        vr = raw_data["match"]["validation_result"]
+                        status = vr.get("status", "undetermined")
+                        status_label = {
+                            "valid": "CONFIRMED ACTIVE",
+                            "invalid": "INACTIVE",
+                            "undetermined": "UNVERIFIED",
+                        }.get(status, "UNVERIFIED")
+                        validation_message = f"- *Validation:* {status_label}\n"
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                logger.warning("Error processing raw_data for titus finding", error=str(e))
+
+            body = f"{finding_message}{rule_message}{validation_message}{file_message}{nemesis_footer_finding}{nemesis_footer_file}{separator}"
+
+            alert = Alert(
+                title=finding_name,
+                body=body,
+                service=origin_name,
+                category=category,
+                severity=severity,
+                file_path=file_path,
+            )
+            await client.publish_event(
+                pubsub_name=ALERTING_PUBSUB,
+                topic_name=ALERTING_NEW_ALERT_TOPIC,
+                data=json.dumps(alert.model_dump(exclude_unset=True)),
+                data_content_type="application/json",
+            )
+            logger.debug("Published alert", alert=alert)
 
 
 @workflow_activity

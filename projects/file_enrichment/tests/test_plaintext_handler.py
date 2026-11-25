@@ -133,9 +133,7 @@ def activity_env(monkeypatch, tmp_path):
 
     client = MagicMock()
     client.publish_event = AsyncMock()
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    monkeypatch.setattr(handler, "DaprClient", MagicMock(return_value=client))
+    monkeypatch.setattr(global_vars, "dapr_client", client)
 
     return SimpleNamespace(client=client, tracking=tracking, file_enriched=file_enriched)
 

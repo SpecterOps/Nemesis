@@ -10,7 +10,6 @@ from common.models import TitusInput
 from common.queues import TITUS_INPUT_TOPIC, TITUS_PUBSUB
 from common.state_helpers import get_file_enriched_async
 from common.workflows.setup import workflow_activity
-from dapr.aio.clients import DaprClient
 from dapr.ext.workflow.workflow_activity_context import WorkflowActivityContext
 
 from .. import global_vars
@@ -66,13 +65,12 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
         titus_input = TitusInput(
             object_id=object_id, workflow_id=ctx.workflow_id, original_path=file_enriched.path or ""
         )
-        async with DaprClient() as client:
-            await client.publish_event(
-                pubsub_name=TITUS_PUBSUB,
-                topic_name=TITUS_INPUT_TOPIC,
-                data=json.dumps(titus_input.model_dump()),
-                data_content_type="application/json",
-            )
+        await global_vars.get_dapr_client().publish_event(
+            pubsub_name=TITUS_PUBSUB,
+            topic_name=TITUS_INPUT_TOPIC,
+            data=json.dumps(titus_input.model_dump()),
+            data_content_type="application/json",
+        )
         result["titus_submitted"] = True
     except Exception as e:
         logger.exception(message="Failed to submit file to Titus", object_id=object_id)

@@ -4,7 +4,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 import file_enrichment.global_vars as global_vars
 from common.db import create_connection_pool, pool_stats_logger
-from common.logger import get_logger
+from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
 from common.queues import (
     DOTNET_OUTPUT_TOPIC,
     DOTNET_PUBSUB,
@@ -19,6 +19,8 @@ from common.workflows.tracking_service import WorkflowTrackingService
 from common.workflows.workflow_purger import WorkflowPurger
 from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
+from dapr.ext.workflow.aio import DaprWorkflowClient as AsyncDaprWorkflowClient
+from dapr.ext.workflow.logger.options import LoggerOptions
 from fastapi import FastAPI
 from file_enrichment.postgres_notifications import postgres_notify_listener
 from file_linking import FileLinkingEngine
@@ -34,6 +36,7 @@ from .subscriptions.bulk_enrichment import bulk_enrichment_subscription_handler
 from .subscriptions.dotnet import dotnet_subscription_handler
 from .subscriptions.file import file_subscription_handler, start_workers, stop_workers
 from .subscriptions.titus import titus_subscription_handler
+from .tracing import get_trace_injector
 from .workflow import initialize_enrichment_modules
 from .workflow_manager import WorkflowManager
 
@@ -47,7 +50,8 @@ max_workflow_execution_time = int(
 logger.info(f"max_workflow_execution_time: {max_workflow_execution_time}")
 
 # Workflow purge interval in seconds
-workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "5"))
+# Dapr purges finished workflows itself (stateRetentionPolicy); this sweep handles timeouts and the DB bookkeeping
+workflow_purge_interval = int(os.getenv("WORKFLOW_PURGE_INTERVAL_SECONDS", "30"))
 workflow_purge_grace_seconds = int(os.getenv("WORKFLOW_PURGE_GRACE_SECONDS", "60"))
 
 
@@ -101,7 +105,12 @@ async def lifespan(app: FastAPI):
     set_workflow_runtime_loop(loop)
 
     async with AsyncExitStack() as stack:
-        dapr_client = await stack.enter_async_context(DaprClient())
+        # One client for the process: each new client checks sidecar health synchronously and opens a gRPC channel
+        dapr_client = await stack.enter_async_context(DaprClient(headers_callback=get_trace_injector()))
+        global_vars.dapr_client = dapr_client
+        global_vars.async_workflow_client = AsyncDaprWorkflowClient(
+            logger_options=LoggerOptions(log_level=WORKFLOW_CLIENT_LOG_LEVEL),
+        )
 
         global_vars.asyncpg_pool = await create_connection_pool(dapr_client)
         global_vars.file_linking_engine = FileLinkingEngine(global_vars.asyncpg_pool)
