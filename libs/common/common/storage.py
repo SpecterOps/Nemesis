@@ -1,3 +1,4 @@
+import asyncio
 import os
 import tempfile
 import uuid
@@ -77,6 +78,17 @@ class StorageS3:
         except Exception:
             logger.exception(file_uuid=file_uuid, bucket_name=self.bucket_name)
             raise
+
+    async def download_async(self, file_uuid: UUID, delete: bool = True) -> tempfile._TemporaryFileWrapper:
+        """download() in a worker thread, so the blocking S3 transfer doesn't stall the event loop.
+
+        The Minio client is thread safe. Use this from async code instead of download().
+        """
+        return await asyncio.to_thread(self.download, file_uuid, delete)
+
+    async def download_bytes_async(self, file_uuid: UUID, offset: int = 0, length: int = 0) -> bytes:
+        """download_bytes() in a worker thread (see download_async)."""
+        return await asyncio.to_thread(self.download_bytes, file_uuid, offset, length)
 
     def download_bytes(self, file_uuid: UUID, offset: int = 0, length: int = 0) -> bytes:
         try:

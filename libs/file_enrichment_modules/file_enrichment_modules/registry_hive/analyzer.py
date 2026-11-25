@@ -1188,7 +1188,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
                 return await self._analyze_registry_hive_file(file_path, file_enriched)
             else:
                 # Download the file to a temporary location
-                with self.storage.download(file_enriched.object_id) as temp_file:
+                with await self.storage.download_async(file_enriched.object_id) as temp_file:
                     return await self._analyze_registry_hive_file(temp_file.name, file_enriched)
 
         except Exception:
@@ -1228,7 +1228,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             # Process SAM if found
             if sam_object_id:
                 try:
-                    with self.storage.download(sam_object_id) as sam_temp_file:
+                    with await self.storage.download_async(sam_object_id) as sam_temp_file:
                         sam_results = self._process_sam_hive(sam_temp_file.name, hive_file_path)
                         analysis_results["sam_analysis"] = sam_results
                         logger.debug(f"Processed paired SAM hive for SYSTEM: {sam_path}")
@@ -1238,7 +1238,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             # Process SECURITY if found
             if security_object_id:
                 try:
-                    with self.storage.download(security_object_id) as security_temp_file:
+                    with await self.storage.download_async(security_object_id) as security_temp_file:
                         sam_results = await self._process_security_hive(
                             security_temp_file.name, hive_file_path, project=file_enriched.project
                         )
@@ -1259,7 +1259,7 @@ class RegistryHiveAnalyzer(EnrichmentModule):
             if system_object_id:
                 # Download the SYSTEM hive
                 try:
-                    with self.storage.download(system_object_id) as system_temp_file:
+                    with await self.storage.download_async(system_object_id) as system_temp_file:
                         if hive_type == "SAM":
                             analysis_results = self._process_sam_hive(hive_file_path, system_temp_file.name)
                         else:  # SECURITY

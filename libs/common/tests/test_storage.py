@@ -85,3 +85,44 @@ def test_delete_objects_modified_before_skips_new_objects(storage):
     removed = [c.args[1] for c in storage.minio_client.remove_object.call_args_list]
     assert removed == ["old", "failing"]
     storage.minio_client.list_objects.assert_called_once_with("files", recursive=True)
+
+
+# --- async download wrappers: the blocking S3 transfer runs off the event loop ---
+
+
+@pytest.fixture
+def download_storage(storage, tmp_path):
+    storage.data_download_dir = str(tmp_path)
+    return storage
+
+
+@pytest.mark.asyncio
+async def test_download_async_runs_off_the_event_loop_thread(download_storage):
+    import threading
+
+    seen = {}
+
+    def fget_object(bucket, key, path):
+        seen["thread"] = threading.current_thread()
+        with open(path, "wb") as fh:
+            fh.write(b"payload")
+
+    download_storage.minio_client.fget_object.side_effect = fget_object
+    with await download_storage.download_async(A) as temp_file:
+        assert open(temp_file.name, "rb").read() == b"payload"
+    assert seen["thread"] is not threading.main_thread()
+    download_storage.minio_client.fget_object.assert_called_once()
+    assert download_storage.minio_client.fget_object.call_args.args[:2] == ("files", str(A))
+
+
+@pytest.mark.asyncio
+async def test_download_async_propagates_errors(download_storage):
+    download_storage.minio_client.fget_object.side_effect = s3_error("NoSuchKey")
+    with pytest.raises(S3Error):
+        await download_storage.download_async(A)
+
+
+@pytest.mark.asyncio
+async def test_download_bytes_async_returns_bytes(storage, monkeypatch):
+    monkeypatch.setattr(storage, "download_bytes", lambda file_uuid, offset=0, length=0: b"abc"[offset:])
+    assert await storage.download_bytes_async(A, offset=1) == b"bc"

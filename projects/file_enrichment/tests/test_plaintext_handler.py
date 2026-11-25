@@ -122,7 +122,10 @@ def activity_env(monkeypatch, tmp_path):
     def download(_object_id):
         yield SimpleNamespace(name=str(path))
 
-    storage.download = download
+    async def download_async(object_id):
+        return download(object_id)
+
+    storage.download_async = download_async
     monkeypatch.setattr(global_vars, "storage", storage)
 
     tracking = SimpleNamespace(update_enrichment_results=AsyncMock())

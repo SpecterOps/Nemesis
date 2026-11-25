@@ -40,7 +40,7 @@ async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: d
             # Download file as a separate span
             with tracer.start_as_current_span("download_file") as download_span:
                 set_object_id_attribute(download_span, object_id)
-                temp_file = global_vars.storage.download(object_id)
+                temp_file = await global_vars.storage.download_async(object_id)
                 temp_file.__enter__()
                 file_size = os.path.getsize(temp_file.name)
                 download_span.set_attribute("file_size", file_size)

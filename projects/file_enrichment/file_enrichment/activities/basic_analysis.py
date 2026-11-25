@@ -51,7 +51,7 @@ async def get_basic_analysis(ctx: WorkflowActivityContext, file_dict: dict) -> N
 
     logger.info("Executing activity: get_basic_analysis", object_id=object_id)
 
-    with global_vars.storage.download(object_id) as file:
+    with await global_vars.storage.download_async(object_id) as file:
         file_enriched_dict = process_basic_analysis(file.name, file_dict)
         await save_file_enriched_to_db(file_enriched_dict)
 

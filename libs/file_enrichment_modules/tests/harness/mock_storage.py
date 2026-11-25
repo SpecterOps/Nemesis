@@ -89,6 +89,14 @@ class MockStorageS3:
         shutil.copyfile(source_path, temp_file.name)
         return temp_file
 
+    async def download_async(self, file_uuid: str, delete: bool = True) -> tempfile._TemporaryFileWrapper:
+        """Async variant of download(), matching StorageS3.download_async."""
+        return self.download(file_uuid, delete)
+
+    async def download_bytes_async(self, file_uuid: str, offset: int = 0, length: int = 0) -> bytes:
+        """Async variant of download_bytes(), matching StorageS3.download_bytes_async."""
+        return self.download_bytes(file_uuid, offset, length)
+
     def download_bytes(self, file_uuid: str, offset: int = 0, length: int = 0) -> bytes:
         """Download raw bytes from a file.
 

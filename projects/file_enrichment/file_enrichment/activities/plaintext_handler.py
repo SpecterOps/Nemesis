@@ -50,7 +50,7 @@ async def handle_file_if_plaintext(ctx: WorkflowActivityContext, activity_input)
     # if the file is plaintext, make sure we index it
     if file_enriched.is_plaintext:
         try:
-            with global_vars.storage.download(object_id) as tmp_file:
+            with await global_vars.storage.download_async(object_id) as tmp_file:
                 with open(tmp_file.name, "rb") as binary_file:
                     with create_text_reader(binary_file) as text_file:
                         await index_plaintext_content(object_id, text_file)
