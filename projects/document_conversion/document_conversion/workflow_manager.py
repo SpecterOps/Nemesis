@@ -5,6 +5,7 @@ import math
 import os
 
 import document_conversion.global_vars as global_vars
+from common.helpers import jsonable
 from common.logger import get_logger
 from common.models import FileEnriched
 
@@ -60,7 +61,7 @@ async def start_workflow_with_concurrency_control(file_enriched: FileEnriched):
         await global_vars.async_workflow_client.schedule_new_workflow(
             workflow=document_conversion_workflow,
             instance_id=instance_id,
-            input={"object_id": object_id},
+            input=jsonable({"object_id": object_id}),
         )
 
         # Start monitoring task for this workflow

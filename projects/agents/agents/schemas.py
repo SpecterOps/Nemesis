@@ -2,6 +2,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
+from common.models2.base import NemesisModel
 from pydantic import BaseModel, Field, field_validator
 
 # findings_triage_history.explanation / true_positive_context are VARCHAR(5000). LLM output is not rejected for
@@ -26,8 +27,8 @@ class TriageDecision(BaseModel):
     explanation: str = Field(..., description="One sentence explaining the reasoning for this decision")
 
 
-class TriageRequest(BaseModel):
-    """Schema for triage workflow input"""
+class TriageRequest(NemesisModel):
+    """Schema for triage workflow input (dumps JSON-safe by default: it is a Dapr workflow input)"""
 
     finding_id: int = Field(..., description="Unique finding identifier")
     finding_name: str = Field(..., description="Name/type of the finding")
@@ -142,8 +143,8 @@ class DotNetAnalysisResponse(BaseModel):
     analysis: str = Field(..., description="Detailed analysis of the .NET assembly")
 
 
-class TriageResult(BaseModel):
-    """Schema for the result returned by finding_triage_workflow()"""
+class TriageResult(NemesisModel):
+    """Schema for the result returned by finding_triage_workflow() (dumps JSON-safe by default)"""
 
     finding_id: int = Field(..., description="ID of the finding that was triaged")
     decision: TriageCategory = Field(..., description="Triage decision made")

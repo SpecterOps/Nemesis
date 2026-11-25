@@ -20,7 +20,7 @@ from agents.tasks.summarizer import summarize_text
 from agents.tasks.translate import translate_text
 from agents.triage_text import fit_triage_text
 from common.db import get_postgres_connection_str
-from common.helpers import as_uuid
+from common.helpers import as_uuid, jsonable
 from common.log_safety import mask
 from dapr.clients import DaprClient
 
@@ -291,10 +291,7 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
         consensus_threshold = int(os.getenv("TRIAGE_CONSENSUS_THRESHOLD", 3))
         consensus = yield ctx.call_activity(
             check_consensus_activity,  # pyright: ignore[reportArgumentType]
-            input={
-                "object_id": object_id,
-                "threshold": consensus_threshold,
-            },
+            input=jsonable({"object_id": object_id, "threshold": consensus_threshold}),
         )
 
         if consensus and consensus.get("has_consensus"):
@@ -329,12 +326,9 @@ def finding_triage_workflow(ctx: DaprWorkflowContext, workflow_input: dict):
             validate_wrapper = agent_manager.get_wrapper_function("validate")
             validation_result = yield ctx.call_activity(
                 validate_wrapper,
-                input={
-                    "file_path": file_path,
-                    "finding_id": finding_id,
-                    "object_id": object_id,
-                    "summary": summary,
-                },
+                input=jsonable(
+                    {"file_path": file_path, "finding_id": finding_id, "object_id": object_id, "summary": summary}
+                ),
             )
             if not ctx.is_replaying:
                 logger.debug(f"validation_result: {validation_result}")

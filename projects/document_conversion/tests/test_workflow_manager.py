@@ -5,8 +5,10 @@ import sys
 import types
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
+from dapr.ext.workflow._durabletask.internal.shared import from_json, to_json
 
 # document_conversion.workflow imports activities that reach Dapr/SeaweedFS at import time
 _fake_workflow = types.ModuleType("document_conversion.workflow")
@@ -55,6 +57,16 @@ async def test_schedules_and_waits_without_polling(client):
     client.terminate_workflow.assert_not_awaited()
     assert wm.active_workflows == {}
     assert wm.workflow_semaphore._value == 2  # slot released
+
+
+@pytest.mark.asyncio
+async def test_uuid_object_id_input_encodes_for_dapr(client):
+    object_id = uuid4()
+    await wm.start_workflow_with_concurrency_control(SimpleNamespace(object_id=object_id, file_name="a.docx"))
+    await _drain()
+
+    workflow_input = client.schedule_new_workflow.await_args.kwargs["input"]
+    assert from_json(to_json(workflow_input)) == {"object_id": str(object_id)}
 
 
 @pytest.mark.asyncio
