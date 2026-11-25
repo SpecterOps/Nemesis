@@ -3,12 +3,13 @@
 import asyncio
 import json
 import os
+import time
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
 import aiohttp
 import common.helpers as helpers
-from async_lru import alru_cache
 from common.helpers import as_uuid
 from common.logger import get_logger
 from common.models import Alert
@@ -25,54 +26,65 @@ logger = get_logger(__name__)
 LLM_EXCLUDED_CATEGORIES = ["extracted_hash", "yara_match", "extracted_data"]
 
 
-# Check if LLM is enabled (agents service is available)
-async def check_llm_enabled():
-    """Check if the agents service is available (LLM functionality enabled).
+# How long a known LLM status is trusted before it is re-probed (in the background, so no caller waits)
+LLM_STATUS_TTL_SECONDS = 30.0
+LLM_PROBE_TIMEOUT_SECONDS = 2.0
 
-    Retries up to 3 times with 10-second delays to handle containers starting in different orders.
-    """
-    max_retries = 3
-    retry_delay = 10
+
+async def check_llm_enabled() -> bool:
+    """Probe the agents service once via Dapr; True means LLM functionality is enabled."""
     dapr_port = os.getenv("DAPR_HTTP_PORT", "3503")
     url = f"http://localhost:{dapr_port}/v1.0/invoke/agents/method/healthz"
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=2)) as response:
-                    if response.status == 200:
-                        logger.info("LLM functionality detected - agents service is available", attempt=attempt)
-                        return True
-                    else:
-                        logger.info(
-                            "Agents service responded with non-200 status",
-                            status=response.status,
-                            attempt=attempt,
-                            max_retries=max_retries,
-                        )
-        except Exception as e:
-            logger.info(
-                "LLM functionality not available - agents service not reachable",
-                error=str(e),
-                attempt=attempt,
-                max_retries=max_retries,
-            )
-
-        # If not the last attempt, wait before retrying
-        if attempt < max_retries:
-            logger.info(f"Waiting {retry_delay} seconds before retry...", attempt=attempt)
-            await asyncio.sleep(retry_delay)
-
-    logger.info("LLM functionality disabled - agents service not available after all retries")
-    return False
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=LLM_PROBE_TIMEOUT_SECONDS)) as response:
+                return response.status == 200
+    except Exception as e:
+        logger.debug("Agents service not reachable", error=str(e))
+        return False
 
 
-@alru_cache(maxsize=1)
-async def is_llm_enabled():
-    """Get cached LLM status, checking on first call."""
-    result = await check_llm_enabled()
-    logger.info(f"LLM functionality: {'enabled' if result else 'disabled'}")
-    return result
+class _LlmStatus:
+    """Cached agents-service availability.
+
+    The first caller waits for one probe (~1s when agents is absent). Afterwards the cached value is returned at once
+    and refreshed in the background once it is older than LLM_STATUS_TTL_SECONDS, so an agents service that starts
+    later (or stops) is picked up without stalling activities on retries.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self.enabled: bool | None = None
+        self.checked_at = 0.0
+        self._probe: asyncio.Task | None = None
+
+    def _start_probe(self) -> asyncio.Task:
+        if self._probe is None or self._probe.done():
+            self._probe = asyncio.create_task(self._run_probe())
+        return self._probe
+
+    async def _run_probe(self) -> bool:
+        enabled = await check_llm_enabled()
+        if enabled != self.enabled:
+            logger.info(f"LLM functionality: {'enabled' if enabled else 'disabled'}")
+        self.enabled = enabled
+        self.checked_at = self._clock()
+        return enabled
+
+    async def get(self) -> bool:
+        if self.enabled is None:
+            return await asyncio.shield(self._start_probe())
+        if self._clock() - self.checked_at >= LLM_STATUS_TTL_SECONDS:
+            self._start_probe()
+        return self.enabled
+
+
+_llm_status = _LlmStatus()
+
+
+async def is_llm_enabled() -> bool:
+    """Whether the agents service (LLM triage) is available; never waits on more than one probe."""
+    return await _llm_status.get()
 
 
 async def publish_alerts_for_findings(
@@ -107,7 +119,7 @@ async def publish_alerts_for_findings(
 
     # Fetch findings from the database for this object_id
     assert global_vars.asyncpg_pool is not None
-    # Release the connection before the LLM check and publishing: the first LLM check can wait ~20s
+    # Release the connection before the LLM check and publishing: the first LLM check waits for a probe
     async with global_vars.asyncpg_pool.acquire() as conn:
         findings = await conn.fetch(query, *params)
 
