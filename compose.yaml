@@ -33,6 +33,7 @@ services:
       - APP_ID=web-api
       - DAPR_GRPC_PORT=50001
       - DAPR_HTTP_PORT=3500
+      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
       - DEFAULT_EXPIRATION_DAYS=${DEFAULT_EXPIRATION_DAYS:-100}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
@@ -81,7 +82,7 @@ services:
       - ./infra/dapr/components/pubsub/files.yaml:/dapr/components/files.yaml:ro
       - ./infra/dapr/components/pubsub/workflow_monitor.yaml:/dapr/components/workflow_monitor.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
@@ -167,7 +168,7 @@ services:
     volumes:
       - ./infra/dapr/components/pubsub/titus.yaml:/dapr/components/titus.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     depends_on: [titus-scanner]
     network_mode: "service:titus-scanner"
 
@@ -226,7 +227,7 @@ services:
     volumes:
       - ./infra/dapr/components/pubsub/dotnet.yaml:/dapr/components/dotnet.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     depends_on: [dotnet-service]
     network_mode: "service:dotnet-service"
 
@@ -449,7 +450,7 @@ services:
     volumes:
       - ./infra/dapr/components/pubsub/alerting.yaml:/dapr/components/alerting.yaml:ro
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
-      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - RABBITMQ_CONNECTION_STRING=amqp://${RABBITMQ_USER_URLENC:-${RABBITMQ_USER}}:${RABBITMQ_PASSWORD_URLENC:-${RABBITMQ_PASSWORD}}@rabbitmq:5672
       - HASURA_ADMIN_SECRET=${HASURA_ADMIN_SECRET:?HASURA_ADMIN_SECRET must be set in .env - tools/nemesis-ctl.sh generates one}
@@ -502,7 +503,7 @@ services:
     volumes:
       - ./infra/dapr/components/secretstore.yaml:/dapr/components/secretstore.yaml:ro
       - ./infra/dapr/components/workflowstate.yaml:/dapr/components/workflowstate.yaml:ro
-      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
     environment:
       - S3_ACCESS_KEY=${S3_ACCESS_KEY:?}
       - S3_SECRET_KEY=${S3_SECRET_KEY:?}
@@ -528,6 +529,7 @@ services:
       - APP_ID=document-conversion
       - DAPR_GRPC_PORT=50002
       - DAPR_HTTP_PORT=3501
+      - NEMESIS_MONITORING=${NEMESIS_MONITORING:-disabled}
       - TIKA_CONFIG=/tika-config.json
       # If you want to have additional language packs supported (see https://github.com/tesseract-ocr/tessdata for a full list):
       #   $ export TIKA_OCR_LANGUAGES="eng chi_sim chi_tra jpn rus deu spa"
@@ -665,7 +667,7 @@ services:
         "5",
       ]
     volumes:
-      - ./infra/dapr/configuration/general.yaml:/dapr/configuration/config.yaml:ro
+      - ./infra/dapr/configuration/general_monitoring_${NEMESIS_MONITORING:-disabled}.yaml:/dapr/configuration/config.yaml:ro
       - empty:/dapr/components:ro
 
     depends_on:

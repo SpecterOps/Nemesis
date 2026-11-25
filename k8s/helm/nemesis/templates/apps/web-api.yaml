@@ -34,6 +34,8 @@ spec:
               value: "50001"
             - name: DAPR_HTTP_PORT
               value: "3500"
+            - name: NEMESIS_MONITORING
+              value: {{ ternary "enabled" "disabled" .Values.monitoring.enabled | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.nemesis.logLevel | quote }}
             - name: DEFAULT_EXPIRATION_DAYS

@@ -249,7 +249,7 @@ async def test_schedule_failure_marks_registered_workflow_failed(monkeypatch):
 
 # --- tracing: spans under the request span (FastAPI instrumentation continues the Dapr delivery trace) ---
 
-import file_enrichment.tracing as tracing  # noqa: E402
+import common.tracing as tracing  # noqa: E402
 from opentelemetry.instrumentation.utils import is_instrumentation_enabled  # noqa: E402
 from opentelemetry.sdk.trace import TracerProvider  # noqa: E402
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402

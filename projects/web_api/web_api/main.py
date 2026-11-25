@@ -41,6 +41,7 @@ from common.queues import (
     WORKFLOW_MONITOR_PUBSUB,
 )
 from common.storage import StorageS3
+from common.tracing import setup_tracing
 from dapr.aio.clients import DaprClient
 from dapr.ext.fastapi import DaprApp
 from fastapi import Body, FastAPI, File, Form, HTTPException, Path, Query, Request, UploadFile
@@ -150,6 +151,7 @@ app = FastAPI(
         {"name": "system", "description": "System and health check endpoints"},
     ],
 )
+setup_tracing(app, "web_api")
 # Refuse requests another site makes a logged-in browser send (see web_api/cross_site.py)
 app.add_middleware(CrossSiteRequestBlocker)
 

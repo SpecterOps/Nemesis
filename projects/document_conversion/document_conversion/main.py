@@ -10,6 +10,7 @@ import jpype
 from common.db import get_postgres_connection_str
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
 from common.queues import DOCUMENT_CONVERSION_INPUT_TOPIC, DOCUMENT_CONVERSION_PUBSUB
+from common.tracing import setup_tracing
 from common.workflows.setup import set_workflow_runtime_loop, wf_runtime
 from common.workflows.workflow_purger import WorkflowPurger
 from dapr.ext.fastapi import DaprApp
@@ -123,6 +124,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+setup_tracing(app, "document_conversion")
 dapr_app = DaprApp(app)
 
 app.include_router(health_router)

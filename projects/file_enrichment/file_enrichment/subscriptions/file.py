@@ -21,13 +21,12 @@ import file_enrichment.global_vars as global_vars
 from common.helpers import jsonb_dumps
 from common.logger import get_logger
 from common.models import CloudEvent, File
+from common.tracing import get_tracer, set_object_id_attribute
 from fastapi import Body
 from opentelemetry import trace
 from opentelemetry.instrumentation.utils import suppress_instrumentation
 from opentelemetry.trace import Span
 from pydantic import ValidationError
-
-from ..tracing import get_tracer, set_object_id_attribute
 
 logger = get_logger(__name__)
 

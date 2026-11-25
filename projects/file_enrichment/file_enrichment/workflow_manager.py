@@ -6,11 +6,11 @@ from datetime import datetime
 import asyncpg
 from common.logger import get_logger
 from common.models import File, SingleEnrichmentWorkflowInput
+from common.tracing import get_tracer, set_object_id_attribute
 from common.workflows.tracking_service import WorkflowStatus
 from dapr.ext.workflow.workflow_state import WorkflowStatus as DaprWorkflowStatus
 
 from . import global_vars
-from .tracing import get_tracer, set_object_id_attribute
 from .workflow_completion import publish_workflow_completion
 
 logger = get_logger(__name__)

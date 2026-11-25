@@ -14,6 +14,7 @@ from common.queues import (
     TITUS_OUTPUT_TOPIC,
     TITUS_PUBSUB,
 )
+from common.tracing import setup_tracing
 from common.workflows.setup import set_workflow_runtime_loop, wf_runtime
 from common.workflows.tracking_service import WorkflowTrackingService
 from common.workflows.workflow_purger import WorkflowPurger
@@ -36,7 +37,6 @@ from .subscriptions.bulk_enrichment import bulk_enrichment_subscription_handler
 from .subscriptions.dotnet import dotnet_subscription_handler
 from .subscriptions.file import file_subscription_handler, start_workers, stop_workers
 from .subscriptions.titus import titus_subscription_handler
-from .tracing import setup_tracing
 from .workflow import initialize_enrichment_modules
 from .workflow_manager import WorkflowManager
 
@@ -201,7 +201,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-setup_tracing(app)  # before the lifespan opens gRPC channels
+setup_tracing(app, "file_enrichment")  # before the lifespan opens gRPC channels
 dapr_app = DaprApp(app)
 
 # Register subscriptions
