@@ -19,5 +19,10 @@ spec:
     value: "dapr_"
   - name: metadataTableName
     value: "dapr_metadata"
+  # pgx defaults to max(4, NumCPU) connections; each workflow turn is one transaction
+  - name: maxConns
+    value: "20"
+  - name: connectionMaxIdleTime
+    value: "5m"
 auth:
   secretStore: nemesis-secret-store
