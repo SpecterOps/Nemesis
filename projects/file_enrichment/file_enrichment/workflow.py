@@ -242,49 +242,52 @@ def enrichment_pipeline_workflow(ctx: wf.DaprWorkflowContext, file_dict: dict):
 
 @wf_runtime.workflow
 def single_enrichment_workflow(ctx: wf.DaprWorkflowContext, workflow_input: dict):
-    """Lightweight workflow that runs a single enrichment module for bulk operations."""
+    """Lightweight workflow that runs a single enrichment module for bulk operations.
+
+    Same as the module step of the main workflow, restricted to one module: the module decides with should_process
+    whether the file applies, and its results are stored and tracked the same way. Findings are not re-alerted.
+    """
+    enrichment_name = workflow_input["enrichment_name"]
+    object_id = as_uuid(workflow_input["object_id"])
+    start_time = ctx.current_utc_datetime
+
+    if not ctx.is_replaying:
+        logger.debug(
+            "Starting single enrichment workflow",
+            enrichment_name=enrichment_name,
+            object_id=object_id,
+            instance_id=ctx.instance_id,
+        )
 
     try:
-        enrichment_name = workflow_input["enrichment_name"]
-        object_id = as_uuid(workflow_input["object_id"])
-
-        if not ctx.is_replaying:
-            logger.debug(
-                "Starting single enrichment workflow",
-                enrichment_name=enrichment_name,
-                object_id=object_id,
-                instance_id=ctx.instance_id,
-            )
-
-        # Get the activity name for this enrichment
-        activity_name = f"enrich_{enrichment_name}"
-        if activity_name not in global_vars.activity_functions:
-            raise KeyError(f"Activity {activity_name} not registered")
-
-        # Run the single enrichment activity
-        result = yield ctx.call_activity(
-            global_vars.activity_functions[activity_name], input=jsonable({"object_id": object_id})
+        results = yield ctx.call_activity(
+            run_enrichment_modules, input=jsonable({"object_id": object_id, "modules": [enrichment_name]})
         )
-
+    except TaskFailedError as e:
         if not ctx.is_replaying:
-            logger.debug(
-                "Single enrichment workflow completed",
+            logger.error(
+                "Single enrichment workflow failed",
                 enrichment_name=enrichment_name,
                 object_id=object_id,
-                result=result,
-                instance_id=ctx.instance_id,
+                error_message=e.details.message,
             )
-
-        return result
-
-    except Exception as e:
-        logger.exception(
-            "Error in single enrichment workflow",
-            enrichment_name=enrichment_name if "enrichment_name" in locals() else "unknown",
-            object_id=object_id if "object_id" in locals() else "unknown",
-            error=str(e),
+        yield ctx.call_activity(
+            finalize_workflow_failure,
+            input={"error_message": str(e.details.message)[:200], "start_time": start_time.isoformat()},
         )
         raise
+
+    yield ctx.call_activity(finalize_workflow_success, input={"start_time": start_time.isoformat()})
+
+    if not ctx.is_replaying:
+        logger.debug(
+            "Single enrichment workflow completed",
+            enrichment_name=enrichment_name,
+            object_id=object_id,
+            result=results,
+            instance_id=ctx.instance_id,
+        )
+    return results
 
 
 # endregion

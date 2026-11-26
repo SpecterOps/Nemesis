@@ -18,10 +18,18 @@ logger = get_logger(__name__)
 
 @workflow_activity
 async def run_enrichment_modules(ctx: WorkflowActivityContext, activity_input: dict):
-    """Activity that runs all enrichment modules for a file with single file download."""
+    """Activity that runs the enrichment modules for a file with a single file download.
+
+    activity_input["modules"] (optional) restricts the run to those modules, in execution order: a bulk
+    enrichment re-runs one module over many files.
+    """
 
     object_id = helpers.as_uuid(activity_input["object_id"])
     execution_order = global_vars.module_execution_order
+    if (selected := activity_input.get("modules")) is not None:
+        if unknown := sorted(set(selected) - set(execution_order)):
+            raise ValueError(f"Unknown enrichment module(s): {', '.join(unknown)}")
+        execution_order = [name for name in execution_order if name in selected]
 
     tracer = get_tracer()
 

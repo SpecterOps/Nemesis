@@ -31,7 +31,6 @@ def get_dapr_client() -> DaprClient:
     return dapr_client
 
 
-activity_functions = {}
 storage = StorageS3()
 global_module_map: dict[str, EnrichmentModule] = {}  # Enrichment modules loaded at initialization
 
