@@ -132,23 +132,27 @@ class WorkflowPurger:
                     wf_id=wf_id,
                 )
 
-            # Update database status to TIMEOUT
+            # Update database status to TIMEOUT, unless the row has meanwhile left RUNNING: the workflow finished just
+            # now, or another replica's purger (every replica scans all workflows) already marked it
             async with self._db_pool.acquire() as conn:
-                await conn.execute(
+                result = await conn.execute(
                     """
                     UPDATE workflows
                     SET status = 'TIMEOUT',
                         enrichments_failure = array_append(enrichments_failure, $2)
-                    WHERE wf_id = $1
+                    WHERE wf_id = $1 AND status = 'RUNNING'
                     """,
                     wf_id,
                     f"Workflow exceeded max execution time ({runtime_seconds:.2f}s > {self._max_execution_time}s)",
                 )
 
-            logger.info(
-                "Marked timed-out workflow as TIMEOUT in database",
-                wf_id=wf_id,
-            )
+            if result == "UPDATE 0":
+                logger.info("Timed-out workflow was already finished or marked, left as is", wf_id=wf_id)
+            else:
+                logger.info(
+                    "Marked timed-out workflow as TIMEOUT in database",
+                    wf_id=wf_id,
+                )
 
             # Return success to mark as purged (workflow is terminated)
             return (True, wf_id)
