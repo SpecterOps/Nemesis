@@ -9,11 +9,12 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from cli.ctl import envfile
+from cli.ctl import envfile, health
 from cli.ctl.config import PROFILES
 
 ACTIONS = ("start", "stop", "clean")
@@ -22,6 +23,8 @@ ACTIONS = ("start", "stop", "clean")
 GENERATED_SECRETS = ("HASURA_ADMIN_SECRET", "LITELLM_SALT_KEY", "LITELLM_ADMIN_PASSWORD")
 URL_CREDENTIALS = ("POSTGRES_USER", "POSTGRES_PASSWORD", "RABBITMQ_USER", "RABBITMQ_PASSWORD")
 POSTGRES_VOLUME = "nemesis_postgres_data"
+DEFAULT_WAIT_TIMEOUT = 600  # seconds
+WAIT_POLL_INTERVAL = 2.0
 
 
 class CtlError(Exception):
@@ -34,6 +37,9 @@ class Deployment:
     profiles: frozenset[str] = frozenset()
     build: bool = False
     phoenix_enabled: bool = True
+    # start only: after `up -d`, wait until every service is healthy/running (or a one-shot exited 0)
+    wait: bool = False
+    wait_timeout: int = DEFAULT_WAIT_TIMEOUT
 
     @property
     def builds(self) -> bool:
@@ -51,6 +57,18 @@ def subprocess_runner(argv: Sequence[str], env: Mapping[str, str], cwd: Path, qu
         return subprocess.run(list(argv), env=dict(env), cwd=cwd, check=False, stdout=output, stderr=output).returncode
     except FileNotFoundError as e:
         raise CtlError(f"{argv[0]} not found; is it installed and on PATH?") from e
+
+
+# (argv, env, cwd) -> (exit status, stdout); stderr passes through
+Capturer = Callable[[Sequence[str], Mapping[str, str], Path], tuple[int, str]]
+
+
+def subprocess_capturer(argv: Sequence[str], env: Mapping[str, str], cwd: Path) -> tuple[int, str]:
+    try:
+        proc = subprocess.run(list(argv), env=dict(env), cwd=cwd, check=False, stdout=subprocess.PIPE, text=True)
+    except FileNotFoundError as e:
+        raise CtlError(f"{argv[0]} not found; is it installed and on PATH?") from e
+    return proc.returncode, proc.stdout
 
 
 def resolve_phoenix_enabled(environ: Mapping[str, str], configured: bool | None) -> bool:
@@ -116,6 +134,9 @@ class Controller:
         runner: Runner = subprocess_runner,
         dry_run: bool = False,
         echo: Callable[[str], None] | None = None,
+        capturer: Capturer = subprocess_capturer,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
     ):
         self.project_dir = project_dir
         self.env_file = project_dir / ".env"
@@ -123,6 +144,9 @@ class Controller:
         self.runner = runner
         self.dry_run = dry_run
         self.echo = echo or (lambda message: print(message, flush=True))
+        self.capturer = capturer
+        self.clock = clock
+        self.sleep = sleep
 
     # --- helpers ---
 
@@ -198,7 +222,11 @@ class Controller:
         else:
             self.echo("Starting services...")
         self._execute("start", d)
-        self._done("\nServices are up and running.")
+        if d.wait:
+            self.wait_until_ready(d)
+            self._done("\nAll services are up and healthy.")
+        else:
+            self._done("\nServices are up and running.")
 
     def stop(self, d: Deployment) -> None:
         self.prepare_down_secrets()
@@ -219,6 +247,45 @@ class Controller:
         env, argv = compose_command(action, d)
         self.echo("\nRunning command:")
         self._check(argv, env)
+
+    def wait_until_ready(self, d: Deployment) -> None:
+        """Poll `docker compose ps` until every container is ready; raise CtlError on a failure or timeout."""
+        env, base = compose_base_args(d, for_build=False)
+        argv = [*base, "ps", "--all", "--format", "json"]
+        self.echo(f"\nWaiting up to {d.wait_timeout}s for services to become healthy...")
+        if self.dry_run:
+            print(format_command(env, argv), file=sys.stderr, flush=True)
+            return
+        deadline = self.clock() + d.wait_timeout
+        last = None
+        while True:
+            rc, out = self.capturer(argv, {**self.environ, **env}, self.project_dir)
+            if rc != 0:
+                raise CtlError(f"`docker compose ps` failed (exit {rc}) while waiting for services.")
+            try:
+                readiness = health.classify(health.parse_ps(out))
+            except (ValueError, TypeError) as e:
+                raise CtlError(f"Could not parse `docker compose ps` output: {e}") from e
+            if readiness.failed:
+                failed = ", ".join(f"{name} ({why})" for name, why in readiness.failed.items())
+                raise CtlError(
+                    f"Service(s) failed to start: {failed}\n"
+                    f"Check their logs with: nemesis logs -e {d.environment} <service>"
+                )
+            if readiness.total and readiness.done:
+                self.echo(health.summarize(readiness))
+                return
+            line = health.summarize(readiness) if readiness.total else "no containers yet"
+            if line != last:
+                self.echo(line)
+                last = line
+            if self.clock() >= deadline:
+                raise CtlError(
+                    f"Timed out after {d.wait_timeout}s; {line}\n"
+                    "The services keep starting in the background; check them with `nemesis status` "
+                    "and `nemesis logs`."
+                )
+            self.sleep(WAIT_POLL_INTERVAL)
 
     def compose(self, d: Deployment, args: Sequence[str]) -> int:
         """Run any other compose subcommand (ps, logs, ...) with the deployment's profiles and files."""

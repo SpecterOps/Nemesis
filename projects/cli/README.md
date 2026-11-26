@@ -45,10 +45,16 @@ uv run nemesis clean dev
 uv run nemesis status prod                      # docker compose ps
 uv run nemesis logs -e prod -f web-api          # docker compose logs
 uv run nemesis start prod --dry-run             # print the commands, change nothing
+uv run nemesis start prod --wait                # block until every service is healthy
 ```
 
 `start` shows docker's own progress (builds, pulls, container start) as it happens, and returns once
-the containers are started.
+the containers are started. With `--wait` (or `wait = true` in `nemesis.toml`) it then polls
+`docker compose ps` and prints a line such as `24/31 ready; waiting on: web-api (starting)` whenever
+it changes. A service counts as ready when it is healthy, running without a healthcheck, or a one-shot
+init container that exited 0. It exits non-zero as soon as a service exits with an error, or after
+`--wait-timeout` seconds (default 600). This is not `docker compose up --wait`, which fails on the
+one-shot `scheduler-init` and `seaweedfs-init` containers even when they succeed.
 
 The checkout is found from the current directory (or a parent), `--project-dir`, or `$NEMESIS_PROJECT_DIR`.
 
@@ -63,6 +69,8 @@ and `--no-<profile>` turns off a profile the file enables.
 environment = "prod"
 profiles = ["monitoring", "llm"]
 build = false
+wait = true               # start: wait until services are healthy
+# wait_timeout = 600       # seconds
 # phoenix_enabled = true   # $PHOENIX_ENABLED overrides this
 ```
 

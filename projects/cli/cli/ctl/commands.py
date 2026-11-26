@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 from cli.ctl.compose import (
+    DEFAULT_WAIT_TIMEOUT,
     Controller,
     CtlError,
     Deployment,
@@ -112,12 +113,13 @@ def _run(r: Resolved, dry_run: bool, action: Callable[[Controller], object]) -> 
         raise click.ClickException(str(e)) from e
 
 
-def _deployment(r: Resolved, build: bool) -> Deployment:
+def _deployment(r: Resolved, build: bool, wait: bool = False, wait_timeout: int | None = None) -> Deployment:
     try:
         phoenix = resolve_phoenix_enabled(os.environ, r.cfg.phoenix_enabled) if "llm" in r.profiles else True
     except CtlError as e:
         raise click.ClickException(str(e)) from e
-    return Deployment(r.environment, r.profiles, build, phoenix)
+    timeout = wait_timeout or r.cfg.wait_timeout or DEFAULT_WAIT_TIMEOUT
+    return Deployment(r.environment, r.profiles, build, phoenix, wait=wait, wait_timeout=timeout)
 
 
 @click.command(epilog=_EPILOG)
@@ -127,12 +129,25 @@ def _deployment(r: Resolved, build: bool) -> Deployment:
     default=None,
     help="Build images before starting (prod; dev always builds).",
 )
-def start(environment, monitoring, jupyter, llm, dry_run, config_path, project_dir, build):
+@click.option(
+    "--wait/--no-wait",
+    default=None,
+    help="After starting, wait until every service is healthy; fail if one exits with an error or times out.",
+)
+@click.option(
+    "--wait-timeout",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="SECONDS",
+    help=f"How long --wait waits (default: {DEFAULT_WAIT_TIMEOUT}).",
+)
+def start(environment, monitoring, jupyter, llm, dry_run, config_path, project_dir, build, wait, wait_timeout):
     """Build (optional) and start the Nemesis services in the background."""
     r = _resolve(config_path, project_dir, environment, {"monitoring": monitoring, "jupyter": jupyter, "llm": llm})
     _describe(r)
     build = build if build is not None else bool(r.cfg.build)
-    _run(r, dry_run, lambda c: c.start(_deployment(r, build)))
+    wait = wait if wait is not None else bool(r.cfg.wait)
+    _run(r, dry_run, lambda c: c.start(_deployment(r, build, wait, wait_timeout)))
 
 
 def _reject_build(ctx: click.Context, _param: click.Parameter, value: bool) -> bool:
@@ -206,6 +221,7 @@ def config_show(config_path, project_dir):
     click.echo(f"environment     = {cfg.environment or '(not set: pass dev or prod)'}")
     click.echo(f"profiles        = {', '.join(cfg.profiles) or '(none)'}")
     click.echo(f"build           = {bool(cfg.build)}")
+    click.echo(f"wait            = {bool(cfg.wait)} (timeout {cfg.wait_timeout or DEFAULT_WAIT_TIMEOUT}s)")
     click.echo(f"phoenix_enabled = {'(default: true)' if cfg.phoenix_enabled is None else cfg.phoenix_enabled}")
 
 

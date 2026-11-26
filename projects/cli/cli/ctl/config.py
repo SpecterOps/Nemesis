@@ -22,7 +22,7 @@ PROJECT_CONFIG_NAME = "nemesis.toml"
 # A file only the repo root has (projects/cli has its own compose.yaml)
 PROJECT_MARKER = "compose.base.yaml"
 
-_DEPLOY_KEYS = {"environment", "build", "profiles", "phoenix_enabled", "project_dir"}
+_DEPLOY_KEYS = {"environment", "build", "profiles", "phoenix_enabled", "project_dir", "wait", "wait_timeout"}
 
 
 class ConfigError(Exception):
@@ -37,6 +37,8 @@ class DeployConfig:
     build: bool | None = None
     profiles: list[str] = field(default_factory=list)
     phoenix_enabled: bool | None = None
+    wait: bool | None = None
+    wait_timeout: int | None = None
     project_dir: Path | None = None
     source: Path | None = None  # file this was loaded from
 
@@ -79,6 +81,14 @@ def load_config(path: Path) -> DeployConfig:
     if "phoenix_enabled" in deploy:
         _expect(deploy["phoenix_enabled"], bool, "phoenix_enabled", path)
         cfg.phoenix_enabled = deploy["phoenix_enabled"]
+    if "wait" in deploy:
+        _expect(deploy["wait"], bool, "wait", path)
+        cfg.wait = deploy["wait"]
+    if "wait_timeout" in deploy:
+        timeout = deploy["wait_timeout"]
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
+            raise ConfigError(f"{path}: deploy.wait_timeout must be a positive number of seconds, got {timeout!r}")
+        cfg.wait_timeout = timeout
     if "profiles" in deploy:
         profiles = deploy["profiles"]
         if not isinstance(profiles, list) or not all(isinstance(p, str) for p in profiles):
@@ -159,6 +169,11 @@ profiles = []
 
 # prod only: build images locally instead of using the published ones (dev always builds).
 build = false
+
+# start: after the containers are up, wait until every service is healthy (or a one-shot init
+# container has finished), and fail if one exits with an error or the timeout passes.
+wait = false
+# wait_timeout = 600   # seconds
 
 # With the llm profile: enable Phoenix LLM tracing. $PHOENIX_ENABLED overrides this.
 # phoenix_enabled = true
