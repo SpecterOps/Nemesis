@@ -85,6 +85,16 @@ async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dic
         raise
 
 
+_READ_CHUNK = 1024 * 1024
+
+
+def _write_strings(output_file, lines: list[bytes]) -> None:
+    """Write the non-blank lines (decoded, without line endings), one per line."""
+    kept = [text for text in (line.decode("utf-8").rstrip("\r") for line in lines) if text.strip()]
+    if kept:
+        output_file.write("\n".join(kept) + "\n")
+
+
 async def extract_all_strings(filename: str, output_file, min_len: int = 5):
     """
     Extracts all single-byte ASCII strings and UTF-16 (both LE and BE) strings
@@ -110,19 +120,14 @@ async def extract_all_strings(filename: str, output_file, min_len: int = 5):
             limit=1024 * 1024 * 10,  # 10MB buffer
         )
 
-        # Stream output line by line and filter as we go
+        # Stream the output in large chunks (one await per line cost more CPU than the filtering itself)
         assert process.stdout is not None, "stdout must not be None when PIPE is used"
-        while True:
-            line = await process.stdout.readline()
-            if not line:
-                break
-
-            # Decode and strip the line
-            line_str = line.decode("utf-8").rstrip("\n\r")
-
-            # Filter out null/empty strings
-            if line_str and line_str.strip():
-                output_file.write(line_str + "\n")
+        partial = b""
+        while chunk := await process.stdout.read(_READ_CHUNK):
+            lines = (partial + chunk).split(b"\n")
+            partial = lines.pop()  # incomplete last line: completed by the next chunk
+            _write_strings(output_file, lines)
+        _write_strings(output_file, [partial])
 
         # Wait for the process to complete
         await process.wait()
