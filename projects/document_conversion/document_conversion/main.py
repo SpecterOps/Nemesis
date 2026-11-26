@@ -7,7 +7,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 import asyncpg
 import document_conversion.global_vars as global_vars
 import jpype
-from common.db import get_postgres_connection_str
+from common.db import get_postgres_connection_str, skip_session_reset
 from common.logger import WORKFLOW_CLIENT_LOG_LEVEL, get_logger
 from common.queues import DOCUMENT_CONVERSION_INPUT_TOPIC, DOCUMENT_CONVERSION_PUBSUB
 from common.tracing import setup_tracing
@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
             postgres_connection_string,
             min_size=max_parallel_workflows,
             max_size=(3 * max_parallel_workflows),
+            reset=skip_session_reset,
         )
         stack.push_async_callback(global_vars.asyncpg_pool.close)
 

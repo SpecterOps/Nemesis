@@ -99,8 +99,13 @@ async def postgres_notify_listener(asyncpg_pool: asyncpg.Pool, workflow_manager:
 
             logger.info(f"Retrying PostgreSQL NOTIFY listener in {retry_delay} seconds...")
         finally:
-            # Always release the connection back to the pool
+            # Always release the connection back to the pool, without its LISTENs: released connections are not
+            # reset with UNLISTEN * (common.db.skip_session_reset), so another user would keep receiving them
             if conn is not None:
+                try:
+                    await conn.execute("UNLISTEN *")
+                except Exception:
+                    pass  # a broken connection is discarded by the pool anyway
                 try:
                     await asyncpg_pool.release(conn)
                     logger.debug("Released PostgreSQL connection back to pool")

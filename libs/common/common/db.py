@@ -74,6 +74,19 @@ def get_postgres_connection_str(dapr_client: DaprClient | None = None) -> str:
     return output
 
 
+async def skip_session_reset(conn: asyncpg.Connection) -> None:
+    """asyncpg pool `reset` hook: hand released connections back without the default reset query.
+
+    By default every release runs `SELECT pg_advisory_unlock_all(); CLOSE ALL; UNLISTEN *; RESET ALL`: one more round
+    trip per acquire, about 40% of file enrichment's queries. With this hook the pool still rolls back a transaction
+    left open and drops the connection's Python-side listeners; only that query is skipped.
+
+    So pooled connections must not keep session state: no `SET` (use `SET LOCAL` inside a transaction), no session
+    advisory locks, no cursors outside a transaction, and `UNLISTEN` before releasing a connection that ran `LISTEN`
+    (as file_enrichment.postgres_notifications does).
+    """
+
+
 async def create_connection_pool(dapr_client: AsyncDaprClient):
     _DAPR_SECRET_STORE_NAME = "nemesis-secret-store"
     postgres_user = (await dapr_client.get_secret(store_name=_DAPR_SECRET_STORE_NAME, key="POSTGRES_USER")).secret[
@@ -103,6 +116,7 @@ async def create_connection_pool(dapr_client: AsyncDaprClient):
         database=postgres_db,
         min_size=min_size,
         max_size=max_size,
+        reset=skip_session_reset,
     )
 
 

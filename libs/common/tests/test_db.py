@@ -326,3 +326,26 @@ async def test_pool_stats_logger_updates_gauges(mock_pool):
     assert DB_POOL_SIZE._value.get() == 8
     assert DB_POOL_IDLE._value.get() == 6
     assert DB_POOL_IN_USE._value.get() == 2
+
+
+# ---- release without the default reset query ----
+
+
+@pytest.mark.asyncio
+@patch("common.db.asyncpg.create_pool", new_callable=AsyncMock)
+async def test_pool_skips_the_reset_query_on_release(mock_create_pool, mock_dapr_client):
+    from common.db import create_connection_pool, skip_session_reset
+
+    await create_connection_pool(mock_dapr_client)
+    assert mock_create_pool.call_args[1]["reset"] is skip_session_reset
+
+
+@pytest.mark.asyncio
+async def test_skip_session_reset_sends_nothing():
+    """The pool rolls back open transactions itself; the hook must not add a round trip."""
+    from common.db import skip_session_reset
+
+    conn = MagicMock()
+    conn.execute = AsyncMock(side_effect=AssertionError("no query expected"))
+    conn.fetch = AsyncMock(side_effect=AssertionError("no query expected"))
+    assert await skip_session_reset(conn) is None
