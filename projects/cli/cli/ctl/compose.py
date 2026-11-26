@@ -315,6 +315,12 @@ class Controller:
         if self.dry_run:
             print(format_command(env, argv), file=sys.stderr, flush=True)
             return
+        # `ps --all` also lists the project's containers from profiles this deployment doesn't enable (left by an
+        # earlier start with --monitoring, say); only the services it includes count
+        rc, out = self.capturer([*base, "config", "--services"], {**self.environ, **env}, self.project_dir)
+        if rc != 0:
+            raise CtlError(f"`docker compose config` failed (exit {rc}) while waiting for services.")
+        services = set(out.split())
         deadline = self.clock() + d.wait_timeout
         last = None
         while True:
@@ -322,9 +328,10 @@ class Controller:
             if rc != 0:
                 raise CtlError(f"`docker compose ps` failed (exit {rc}) while waiting for services.")
             try:
-                readiness = health.classify(health.parse_ps(out))
+                containers = [c for c in health.parse_ps(out) if c.service in services]
             except (ValueError, TypeError) as e:
                 raise CtlError(f"Could not parse `docker compose ps` output: {e}") from e
+            readiness = health.classify(containers)
             if readiness.failed:
                 failed = ", ".join(f"{name} ({why})" for name, why in readiness.failed.items())
                 raise CtlError(

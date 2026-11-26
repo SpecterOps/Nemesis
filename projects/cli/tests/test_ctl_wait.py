@@ -67,15 +67,33 @@ def test_summarize_truncates():
 # --- polling ---
 
 
-class FakeDocker:
-    """Returns scripted `ps` outputs in turn (repeating the last), with a fake clock."""
+def _services_in(output: str) -> list[str]:
+    try:
+        return [c.service for c in health.parse_ps(output)]
+    except ValueError:
+        return []
 
-    def __init__(self, outputs: list[str | tuple[int, str]]):
+
+class FakeDocker:
+    """Returns scripted `ps` outputs in turn (repeating the last), with a fake clock.
+
+    `config --services` lists SERVICES, by default every service the scripted outputs mention.
+    """
+
+    def __init__(self, outputs: list[str | tuple[int, str]], services: list[str] | None = None, config_rc: int = 0):
         self.outputs = outputs
-        self.calls: list[list[str]] = []
+        self.calls: list[list[str]] = []  # ps calls
+        self.config_calls: list[list[str]] = []
         self.now = 0.0
+        self.config_rc = config_rc
+        if services is None:
+            services = sorted({m for out in outputs if isinstance(out, str) for m in _services_in(out)})
+        self.services = services
 
     def capturer(self, argv, env, cwd):
+        if "config" in argv:
+            self.config_calls.append(list(argv))
+            return self.config_rc, "\n".join(self.services) + "\n"
         self.calls.append(list(argv))
         out = self.outputs[min(len(self.calls), len(self.outputs)) - 1]
         return out if isinstance(out, tuple) else (0, out)
@@ -152,12 +170,31 @@ def test_unparseable_ps_output_is_an_error(tmp_path):
         controller(tmp_path, fake, []).wait_until_ready(Deployment("dev", wait=True))
 
 
+def test_ignores_containers_outside_the_deployment(tmp_path):
+    """An exited container from a profile this start didn't enable (e.g. an old --monitoring run) doesn't count."""
+    fake = FakeDocker(
+        [ps(("db", "running", "healthy", 0), ("loki", "exited", "", 1), ("grafana", "running", "starting", 0))],
+        services=["db"],
+    )
+    messages: list[str] = []
+    controller(tmp_path, fake, messages).wait_until_ready(Deployment("prod", wait=True, wait_timeout=60))
+    assert messages[-1] == "1/1 ready"
+    assert fake.config_calls == [["docker", "compose", "-f", "compose.yaml", "config", "--services"]]
+
+
+def test_config_failure_is_an_error(tmp_path):
+    fake = FakeDocker([ps(("db", "running", "healthy", 0))], config_rc=1)
+    with pytest.raises(CtlError, match="`docker compose config` failed"):
+        controller(tmp_path, fake, []).wait_until_ready(Deployment("dev", wait=True))
+    assert fake.calls == []
+
+
 def test_dry_run_does_not_poll(tmp_path):
     fake = FakeDocker([])
     c = controller(tmp_path, fake, [])
     c.dry_run = True
     c.wait_until_ready(Deployment("dev", wait=True))
-    assert fake.calls == []
+    assert fake.calls == [] and fake.config_calls == []
 
 
 # --- start --wait from the command line and nemesis.toml ---
