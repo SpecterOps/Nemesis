@@ -401,7 +401,10 @@ dapr:
   # Pubsub prefetch counts (per component)
   pubsub:
     files:
-      prefetchCount: "100"
+      # About 2x fileEnrichment.env.maxParallelWorkflows. KEDA's RabbitMQ scaler counts only messages still in the
+      # queue, so a pod that prefetches more hides the backlog: a burst it holds never scales out, and new pods can't
+      # take the files it already holds. (100 vs 10 made no measurable difference with replicas already running.)
+      prefetchCount: "10"
     alerting:
       prefetchCount: "25"
     documentConversion:
