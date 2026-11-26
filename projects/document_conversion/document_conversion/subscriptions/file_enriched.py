@@ -1,11 +1,32 @@
 """Handler for file_enriched subscription events."""
 
+import asyncio
+import re
+from functools import cache
+
 import fitz  # PyMuPDF
 from common.logger import get_logger
 from common.models import CloudEvent, FileEnriched
+from common.storage import StorageS3
 from minio.error import S3Error
 
 logger = get_logger(__name__)
+
+# Only these can be password- or RMS-protected in a way the checks below detect (PDF, OLE/CDFV2 Office files, and
+# zip-based OOXML, which `file` may report as a plain zip); everything else (binaries, archives, images, ...) would
+# be downloaded just to fail the PDF and Office parsers
+_MAYBE_PROTECTED = re.compile(r"pdf document|composite document file|cdfv2|microsoft|(?<!7-)zip archive")
+
+
+@cache
+def _storage() -> StorageS3:
+    """One S3 client per process (each StorageS3 opens a Dapr client to read the S3 secrets)."""
+    return StorageS3()
+
+
+def _may_be_protected(magic_type: str) -> bool:
+    magic = (magic_type or "").lower()
+    return not magic or _MAYBE_PROTECTED.search(magic) is not None
 
 
 def is_pdf_encrypted(pdf_path):
@@ -62,27 +83,17 @@ def check_rms_protected(file_path: str):
 
 
 def is_encrypted_file(file_data: FileEnriched):
-    """Uses the magic type to determine if the file is encrypted"""
-    from common.storage import StorageS3
+    """Whether the file is encrypted or RMS protected: from the magic type, else by opening PDFs and Office files.
 
-    storage = StorageS3()
-
+    Blocking (S3 download and parsing): call it from a worker thread. Raises S3Error (NoSuchKey) if the object is gone.
+    """
     if "Security: 1" in file_data.magic_type or "CDFV2 Encrypted" in file_data.magic_type:
         return True
 
-    # Check if file exists before attempting download
-    if not storage.check_file_exists(file_data.object_id):
-        logger.warning("File does not exist in MinIO", object_id=file_data.object_id)
-        raise S3Error(
-            code="NoSuchKey",
-            message=f"Object {file_data.object_id} does not exist",
-            resource=str(file_data.object_id),
-            request_id="",
-            host_id="",
-            response=None,  # pyright: ignore[reportArgumentType]
-        )
+    if not _may_be_protected(file_data.magic_type):
+        return False
 
-    with storage.download(file_data.object_id) as temp_file:
+    with _storage().download(file_data.object_id) as temp_file:
         if "pdf document" in file_data.magic_type.lower():
             return is_pdf_encrypted(temp_file.name)
         else:
@@ -101,7 +112,7 @@ async def file_enriched_subscription_handler(event: CloudEvent[FileEnriched]):
         logger.debug("Received file_enriched event", object_id=file_enriched.object_id)
 
         # If the file is encrypted, skip
-        if is_encrypted_file(file_enriched):
+        if await asyncio.to_thread(is_encrypted_file, file_enriched):
             logger.warning(
                 "Skipping document_conversion_workflow - file is encrypted or protected",
                 object_id=file_enriched.object_id,
