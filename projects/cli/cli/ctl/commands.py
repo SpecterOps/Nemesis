@@ -26,6 +26,7 @@ from cli.ctl.config import (
     load_effective_config,
     user_config_path,
 )
+from cli.ctl.sizing import AUTO, REPLICAS_ENVVAR, SizingError, parse_replicas
 
 _PROFILE_HELP = {
     "monitoring": "the monitoring profile (Grafana, Prometheus)",
@@ -113,13 +114,26 @@ def _run(r: Resolved, dry_run: bool, action: Callable[[Controller], object]) -> 
         raise click.ClickException(str(e)) from e
 
 
-def _deployment(r: Resolved, build: bool, wait: bool = False, wait_timeout: int | None = None) -> Deployment:
+def _deployment(
+    r: Resolved, build: bool, wait: bool = False, wait_timeout: int | None = None, replicas: int | None = None
+) -> Deployment:
     try:
         phoenix = resolve_phoenix_enabled(os.environ, r.cfg.phoenix_enabled) if "llm" in r.profiles else True
     except CtlError as e:
         raise click.ClickException(str(e)) from e
     timeout = wait_timeout or r.cfg.wait_timeout or DEFAULT_WAIT_TIMEOUT
-    return Deployment(r.environment, r.profiles, build, phoenix, wait=wait, wait_timeout=timeout)
+    return Deployment(
+        r.environment, r.profiles, build, phoenix, wait=wait, wait_timeout=timeout, enrichment_replicas=replicas
+    )
+
+
+def _replicas(flag: str | None, r: Resolved) -> int | None:
+    """--enrichment-replicas / $NEMESIS_ENRICHMENT_REPLICAS, then nemesis.toml, then auto (None)."""
+    value = flag if flag is not None else r.cfg.enrichment_replicas
+    try:
+        return parse_replicas(AUTO if value is None else value)
+    except SizingError as e:
+        raise click.BadParameter(str(e), param_hint="--enrichment-replicas") from e
 
 
 @click.command(epilog=_EPILOG)
@@ -141,13 +155,35 @@ def _deployment(r: Resolved, build: bool, wait: bool = False, wait_timeout: int 
     metavar="SECONDS",
     help=f"How long --wait waits (default: {DEFAULT_WAIT_TIMEOUT}).",
 )
-def start(environment, monitoring, jupyter, llm, dry_run, config_path, project_dir, build, wait, wait_timeout):
+@click.option(
+    "--enrichment-replicas",
+    envvar=REPLICAS_ENVVAR,
+    show_envvar=True,
+    default=None,
+    metavar="auto|N",
+    help="prod: file-enrichment replicas, each with its own Dapr sidecar (default: auto, sized to the CPUs; "
+    "$NEMESIS_CPUS overrides the detected count).",
+)
+def start(
+    environment,
+    monitoring,
+    jupyter,
+    llm,
+    dry_run,
+    config_path,
+    project_dir,
+    build,
+    wait,
+    wait_timeout,
+    enrichment_replicas,
+):
     """Build (optional) and start the Nemesis services in the background."""
     r = _resolve(config_path, project_dir, environment, {"monitoring": monitoring, "jupyter": jupyter, "llm": llm})
     _describe(r)
     build = build if build is not None else bool(r.cfg.build)
     wait = wait if wait is not None else bool(r.cfg.wait)
-    _run(r, dry_run, lambda c: c.start(_deployment(r, build, wait, wait_timeout)))
+    replicas = _replicas(enrichment_replicas, r)
+    _run(r, dry_run, lambda c: c.start(_deployment(r, build, wait, wait_timeout, replicas)))
 
 
 def _reject_build(ctx: click.Context, _param: click.Parameter, value: bool) -> bool:
@@ -223,6 +259,8 @@ def config_show(config_path, project_dir):
     click.echo(f"build           = {bool(cfg.build)}")
     click.echo(f"wait            = {bool(cfg.wait)} (timeout {cfg.wait_timeout or DEFAULT_WAIT_TIMEOUT}s)")
     click.echo(f"phoenix_enabled = {'(default: true)' if cfg.phoenix_enabled is None else cfg.phoenix_enabled}")
+    replicas = AUTO if cfg.enrichment_replicas is None else cfg.enrichment_replicas
+    click.echo(f"enrichment_replicas = {replicas} (prod)")
 
 
 @config_group.command("init")

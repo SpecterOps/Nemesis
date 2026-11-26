@@ -101,6 +101,9 @@ def run_both(tmp_path, stub_path, args, *, env_content, extra_env=None):
             "HOME": str(tmp_path),
             "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
             "STUB_LOG": str(log),
+            # Replicas are a CLI-only feature (sized to the CPUs); with one, the CLI must match the script exactly
+            "NEMESIS_ENRICHMENT_REPLICAS": "1",
+            "XDG_STATE_HOME": str(tmp_path / "state"),
             **(extra_env or {}),
         }
         if impl == "bash":

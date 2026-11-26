@@ -35,7 +35,8 @@ Monitor a directory for new files and automatically submit them to Nemesis.
 ### start / stop / clean (deploying Nemesis)
 Python versions of `tools/nemesis-ctl.sh` that take the same arguments, run the same `docker compose`
 commands, and generate missing secrets in `.env` the same way, so either tool can manage a deployment.
-The bash script still works and is unchanged.
+The bash script still works and is unchanged. One addition is CLI-only: in prod, `start` runs extra
+file-enrichment replicas on machines with enough CPUs (see below); with one replica the commands are identical.
 
 ```bash
 cd projects/cli
@@ -58,6 +59,24 @@ one-shot `scheduler-init` and `seaweedfs-init` containers even when they succeed
 
 The checkout is found from the current directory (or a parent), `--project-dir`, or `$NEMESIS_PROJECT_DIR`.
 
+#### File-enrichment replicas (prod)
+One file-enrichment process uses at most about one core, so on larger machines `start prod` runs several
+file-enrichment containers, each with its own Dapr sidecar under the same app ID, and they share the work. By
+default the count follows the CPUs: 1 replica up to 5 CPUs, 2 at 6-7, 3 at 8-9, and 4 from 10. On 8 CPUs, 3 replicas
+processed a benchmark of ~1000 files 41% faster than 1 (2 replicas: 31%); beyond that Postgres becomes the limit.
+
+```bash
+uv run nemesis start prod                           # "File enrichment: 3 replicas, ... (sized for 8 CPUs)"
+uv run nemesis start prod --enrichment-replicas 1   # one instance, exactly as tools/nemesis-ctl.sh runs it
+NEMESIS_CPUS=4 uv run nemesis start prod            # size as if the host had 4 CPUs (e.g. on a shared host)
+```
+
+The count comes from `--enrichment-replicas` (or `$NEMESIS_ENRICHMENT_REPLICAS`), then `enrichment_replicas` in
+`nemesis.toml`, then `auto`. The extra services (`file-enrichment-2`, `file-enrichment-2-dapr`, ...) are written to a
+compose override under `~/.local/state/nemesis/deployments/` that `stop`, `clean`, `status` and `logs` include too.
+Starting with fewer replicas removes the extra ones. Dev always runs one instance. Stop a deployment with replicas
+using `nemesis stop`: `tools/nemesis-ctl.sh stop` doesn't know about them.
+
 Defaults for the environment, profiles and `--build` can be kept in a `nemesis.toml`, so `stop` and
 `clean` always match what `start` used. `uv run nemesis config init` writes an example to the repo root
 (git-ignored); `--user` writes `~/.config/nemesis/nemesis.toml` instead. The first file found is used:
@@ -72,6 +91,7 @@ build = false
 wait = true               # start: wait until services are healthy
 # wait_timeout = 600       # seconds
 # phoenix_enabled = true   # $PHOENIX_ENABLED overrides this
+# enrichment_replicas = "auto"   # prod: or a count; $NEMESIS_ENRICHMENT_REPLICAS overrides this
 ```
 
 `uv run nemesis config show` prints the settings in effect and which file they came from.

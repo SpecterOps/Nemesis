@@ -13,6 +13,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from cli.ctl.sizing import SizingError, parse_replicas
+
 ENVIRONMENTS = ("dev", "prod")
 PROFILES = ("monitoring", "jupyter", "llm")
 
@@ -22,7 +24,16 @@ PROJECT_CONFIG_NAME = "nemesis.toml"
 # A file only the repo root has (projects/cli has its own compose.yaml)
 PROJECT_MARKER = "compose.base.yaml"
 
-_DEPLOY_KEYS = {"environment", "build", "profiles", "phoenix_enabled", "project_dir", "wait", "wait_timeout"}
+_DEPLOY_KEYS = {
+    "environment",
+    "build",
+    "profiles",
+    "phoenix_enabled",
+    "project_dir",
+    "wait",
+    "wait_timeout",
+    "enrichment_replicas",
+}
 
 
 class ConfigError(Exception):
@@ -39,6 +50,7 @@ class DeployConfig:
     phoenix_enabled: bool | None = None
     wait: bool | None = None
     wait_timeout: int | None = None
+    enrichment_replicas: str | int | None = None  # "auto" or a count
     project_dir: Path | None = None
     source: Path | None = None  # file this was loaded from
 
@@ -89,6 +101,12 @@ def load_config(path: Path) -> DeployConfig:
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
             raise ConfigError(f"{path}: deploy.wait_timeout must be a positive number of seconds, got {timeout!r}")
         cfg.wait_timeout = timeout
+    if "enrichment_replicas" in deploy:
+        try:
+            parse_replicas(deploy["enrichment_replicas"])
+        except SizingError as e:
+            raise ConfigError(f"{path}: deploy.enrichment_replicas: {e}") from e
+        cfg.enrichment_replicas = deploy["enrichment_replicas"]
     if "profiles" in deploy:
         profiles = deploy["profiles"]
         if not isinstance(profiles, list) or not all(isinstance(p, str) for p in profiles):
@@ -174,6 +192,10 @@ build = false
 # container has finished), and fail if one exits with an error or the timeout passes.
 wait = false
 # wait_timeout = 600   # seconds
+
+# prod only: file-enrichment replicas, each with its own Dapr sidecar. "auto" sizes to the CPUs (1 up to 5 CPUs,
+# 2 at 6-7, 3 at 8-9, then 4; $NEMESIS_CPUS overrides the detected count). $NEMESIS_ENRICHMENT_REPLICAS overrides this.
+# enrichment_replicas = "auto"
 
 # With the llm profile: enable Phoenix LLM tracing. $PHOENIX_ENABLED overrides this.
 # phoenix_enabled = true

@@ -11,10 +11,10 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from cli.ctl import envfile, health
+from cli.ctl import envfile, health, sizing
 from cli.ctl.config import PROFILES
 
 ACTIONS = ("start", "stop", "clean")
@@ -40,6 +40,12 @@ class Deployment:
     # start only: after `up -d`, wait until every service is healthy/running (or a one-shot exited 0)
     wait: bool = False
     wait_timeout: int = DEFAULT_WAIT_TIMEOUT
+    # start only: file-enrichment replicas to run (None: sized to the CPUs; prod only)
+    enrichment_replicas: int | None = None
+    # Compose override with the extra replicas (set by the Controller), and whether `up` removes replicas that a
+    # previous start created but this one doesn't
+    replicas_file: Path | None = None
+    remove_orphans: bool = False
 
     @property
     def builds(self) -> bool:
@@ -99,6 +105,8 @@ def compose_base_args(d: Deployment, *, for_build: bool) -> tuple[dict[str, str]
         # The production build file is only needed for a build+start
         if for_build:
             argv += ["-f", "compose.prod.build.yaml"]
+        if d.replicas_file is not None:
+            argv += ["-f", str(d.replicas_file)]
     return env, argv
 
 
@@ -107,6 +115,8 @@ def compose_command(action: str, d: Deployment) -> tuple[dict[str, str], list[st
     env, argv = compose_base_args(d, for_build=action == "start" and d.environment == "prod" and d.build)
     if action == "start":
         argv += ["up", "--build", "-d"] if d.builds else ["up", "-d"]
+        if d.remove_orphans:
+            argv += ["--remove-orphans"]
     elif action == "stop":
         argv += ["down"]
     elif action == "clean":
@@ -207,12 +217,57 @@ class Controller:
         if not self.dry_run:
             shutil.copyfile(version, self.project_dir / "projects" / "frontend" / "public" / "version.json")
 
+    def _replicas_file(self) -> Path:
+        return sizing.override_path(self.project_dir, self.environ)
+
+    def size_enrichment(self, d: Deployment) -> Deployment:
+        """Decide the file-enrichment replica count and write (or remove) the compose override for it."""
+        if d.environment != "prod":
+            # Dev runs one instance: passing any -f would also stop compose loading compose.override.yaml
+            if d.enrichment_replicas not in (None, 1):
+                raise CtlError("File-enrichment replicas are only supported in the prod environment.")
+            return d
+        try:
+            if d.enrichment_replicas is None:
+                cpus = sizing.detect_cpus(self.environ)
+                replicas, reason = sizing.auto_replicas(cpus), f"sized for {cpus} CPUs"
+            else:
+                replicas, reason = d.enrichment_replicas, "as configured"
+        except sizing.SizingError as e:
+            raise CtlError(str(e)) from e
+        noun = "replica" if replicas == 1 else "replicas, each with its own Dapr sidecar"
+        self.echo(f"File enrichment: {replicas} {noun} ({reason})")
+
+        path = self._replicas_file()
+        previous = path.is_file()  # replicas from the last start, which `up` must remove if they're no longer wanted
+        if self.dry_run:
+            if replicas > 1:
+                self.echo(f"(dry run: {path} is not written)")
+        elif replicas > 1:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(sizing.render_override(self.project_dir, replicas, build=d.builds))
+        elif previous:
+            path.unlink()
+        return replace(d, replicas_file=path if replicas > 1 else None, remove_orphans=previous)
+
+    def with_existing_replicas(self, d: Deployment) -> Deployment:
+        """Include the replicas the last start created, so stop/clean/status/logs cover them too."""
+        path = self._replicas_file()
+        if d.environment == "prod" and path.is_file():
+            return replace(d, replicas_file=path)
+        return d
+
+    def _forget_replicas(self, d: Deployment) -> None:
+        if d.replicas_file is not None and not self.dry_run:
+            d.replicas_file.unlink(missing_ok=True)
+
     # --- actions ---
 
     def start(self, d: Deployment) -> None:
         self._require_env_file()
         self.prepare_start_secrets()
         self.echo(f"--- Preparing to Start Services for '{d.environment}' environment ---")
+        d = self.size_enrichment(d)
         self.write_version_info()
         if d.builds:
             # Base images must be built for both dev and prod before starting
@@ -231,13 +286,17 @@ class Controller:
     def stop(self, d: Deployment) -> None:
         self.prepare_down_secrets()
         self.echo(f"--- Preparing to Stop Services for '{d.environment}' environment ---")
+        d = self.with_existing_replicas(d)
         self._execute("stop", d)
+        self._forget_replicas(d)
         self._done("\nServices and containers have been stopped and removed.")
 
     def clean(self, d: Deployment) -> None:
         self.prepare_down_secrets()
         self.echo(f"--- Preparing to Clean Services and Volumes for '{d.environment}' environment ---")
+        d = self.with_existing_replicas(d)
         self._execute("clean", d)
+        self._forget_replicas(d)
         self._done("\nServices, containers, and volumes have been stopped and removed.")
 
     def _done(self, message: str) -> None:
@@ -290,7 +349,7 @@ class Controller:
     def compose(self, d: Deployment, args: Sequence[str]) -> int:
         """Run any other compose subcommand (ps, logs, ...) with the deployment's profiles and files."""
         self.prepare_down_secrets()
-        env, argv = compose_base_args(d, for_build=False)
+        env, argv = compose_base_args(self.with_existing_replicas(d), for_build=False)
         return self._run([*argv, *args], env)
 
 
