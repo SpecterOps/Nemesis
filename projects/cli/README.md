@@ -32,6 +32,42 @@ Monitor a directory for new files and automatically submit them to Nemesis.
 - `--only-monitor`: Skip existing files, only watch for new ones
 - `-w, --workers`: Number of threads for initial submission
 
+### start / stop / clean (deploying Nemesis)
+Python versions of `tools/nemesis-ctl.sh` that take the same arguments, run the same `docker compose`
+commands, and generate missing secrets in `.env` the same way, so either tool can manage a deployment.
+The bash script still works and is unchanged.
+
+```bash
+cd projects/cli
+uv run nemesis start prod --monitoring --llm   # same as ./tools/nemesis-ctl.sh start prod --monitoring --llm
+uv run nemesis stop prod --monitoring --llm
+uv run nemesis clean dev
+uv run nemesis status prod                      # docker compose ps
+uv run nemesis logs -e prod -f web-api          # docker compose logs
+uv run nemesis start prod --dry-run             # print the commands, change nothing
+```
+
+`start` shows docker's own progress (builds, pulls, container start) as it happens, and returns once
+the containers are started.
+
+The checkout is found from the current directory (or a parent), `--project-dir`, or `$NEMESIS_PROJECT_DIR`.
+
+Defaults for the environment, profiles and `--build` can be kept in a `nemesis.toml`, so `stop` and
+`clean` always match what `start` used. `uv run nemesis config init` writes an example to the repo root
+(git-ignored); `--user` writes `~/.config/nemesis/nemesis.toml` instead. The first file found is used:
+`--config`/`$NEMESIS_CONFIG`, then `<repo>/nemesis.toml`, then the user file. Flags override the file,
+and `--no-<profile>` turns off a profile the file enables.
+
+```toml
+[deploy]
+environment = "prod"
+profiles = ["monitoring", "llm"]
+build = false
+# phoenix_enabled = true   # $PHOENIX_ENABLED overrides this
+```
+
+`uv run nemesis config show` prints the settings in effect and which file they came from.
+
 ### Connector startup checks
 
 Normal C2 connector runs (Mythic, Outflank, and Cobalt Strike) check Nemesis at

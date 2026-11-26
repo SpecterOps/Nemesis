@@ -39,6 +39,7 @@ dev = [
 ]
 
 [project.scripts]
+nemesis = "cli.main:main"
 submit = "cli.main:submit"
 module_runner = "cli.module_runner:main"
 stress_test = "cli.stress_test:main"

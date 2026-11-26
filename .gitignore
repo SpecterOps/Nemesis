@@ -128,6 +128,8 @@ celerybeat.pid
 
 # Environments
 .env
+# Per-deployment defaults for `cli start/stop/clean` (see `cli config init`)
+nemesis.toml
 .venv
 env/
 venv/

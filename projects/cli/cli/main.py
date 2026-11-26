@@ -5,6 +5,7 @@ import sys
 import click
 from cli.cobaltstrike_connector.cobaltstrike_connector import run_cobaltstrike_connector
 from cli.config import Config, default_state_dir, load_config
+from cli.ctl import DEPLOY_COMMANDS
 from cli.log import setup_logging
 from cli.monitor import monitor_main
 from cli.mythic_connector.mythic_connector import start
@@ -363,6 +364,10 @@ def monitor(
         verify_ssl=not ignore_cert_errors,
         ca_file=ca_file,
     )
+
+
+for _command in DEPLOY_COMMANDS:
+    cli.add_command(_command)
 
 
 def main():
