@@ -10,6 +10,8 @@ metadata:
 spec:
   basicAuth:
     secret: nemesis-basic-auth-secret
+    # Backends never see the Nemesis password
+    removeHeader: true
 ---
 apiVersion: v1
 kind: Secret
@@ -34,6 +36,8 @@ metadata:
 spec:
   basicAuth:
     secret: nemesis-rabbitmq-auth-secret
+    # Backends never see the Nemesis password
+    removeHeader: true
 ---
 apiVersion: v1
 kind: Secret

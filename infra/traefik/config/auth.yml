@@ -6,6 +6,8 @@ http:
   middlewares:
     auth:
       basicAuth:
+        # Backends never see the Nemesis password
+        removeHeader: true
         users:
 {{- range $user := splitList "," (env "BASIC_AUTH_USERS") }}
 {{- if trim $user }}
