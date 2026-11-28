@@ -33,18 +33,19 @@ async def extract_strings(ctx: WorkflowActivityContext, file_input: dict) -> dic
             return None
 
         with storage.download(file_enriched.object_id) as temp_file:
-            # Create temp file for streaming strings output
-            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False) as tmp_file:
-                tmp_file_path = tmp_file.name
-
+            # Temp file for the strings output, removed when closed
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".txt") as tmp_file:
                 # Stream strings directly to temp file with filtering
                 await extract_all_strings(temp_file.name, tmp_file, min_len=5)
 
-                if os.path.getsize(tmp_file_path) == 0:
+                # The size check and the upload read the file by path: without a flush, output still in the write
+                # buffer (up to 8 KB) was missing - small outputs looked empty and larger ones lost their end
+                tmp_file.flush()
+                if os.path.getsize(tmp_file.name) == 0:
                     logger.info("Temporary strings file is empty", object_id=file_enriched.object_id)
                     return None
 
-                object_id = storage.upload_file(tmp_file_path)
+                object_id = storage.upload_file(tmp_file.name)
 
         transform = Transform(
             type="extracted_strings",
