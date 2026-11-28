@@ -5,7 +5,7 @@ global:
   imagePullPolicy: Never
 
 # pgbouncer: no override needed — the image is imported into containerd with its
-# original tag (ghcr.io/cloudnative-pg/pgbouncer:1.26.1-202611051526-trixie) which matches values.yaml.
+# original tag (ghcr.io/cloudnative-pg/pgbouncer:1.26.1-202611251233-trixie) which matches values.yaml.
 
 nemesis:
   logLevel: DEBUG

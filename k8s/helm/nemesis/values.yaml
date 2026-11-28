@@ -76,7 +76,7 @@ monitoring:
   grafana:
     image:
       repository: grafana/grafana
-      tag: "13.3.1"
+      tag: "13.3.2"
     port: 3000
     storage:
       size: 5Gi
@@ -96,7 +96,7 @@ monitoring:
   loki:
     image:
       repository: grafana/loki
-      tag: "3.7.10"
+      tag: "3.7.11"
     port: 3100
     storage:
       size: 10Gi
@@ -140,7 +140,7 @@ monitoring:
   otelCollector:
     image:
       repository: otel/opentelemetry-collector
-      tag: "0.165.0"
+      tag: "0.166.0"
     resources:
       requests:
         cpu: 100m
@@ -213,7 +213,7 @@ llm:
   litellm:
     image:
       repository: ghcr.io/berriai/litellm
-      tag: "v1.110.2"
+      tag: "v1.111.0"
     port: 4000
     env:
       storeModelInDb: "True"
@@ -232,7 +232,7 @@ llm:
   phoenix:
     image:
       repository: arizephoenix/phoenix
-      tag: "22.0.1"
+      tag: "22.1.0"
     port: 6006
     storage:
       size: 5Gi
@@ -307,7 +307,7 @@ pgbouncer:
     # values-dev.yaml overrides the registry accordingly.
     registry: "ghcr.io"
     repository: cloudnative-pg/pgbouncer
-    tag: "1.26.1-202611051526-trixie"
+    tag: "1.26.1-202611251233-trixie"
   replicas: 1
   port: 5432
   poolMode: transaction
@@ -601,7 +601,7 @@ housekeeping:
 gotenberg:
   image:
     repository: gotenberg/gotenberg
-    tag: "9.9.3"
+    tag: "9.10.3"
   replicas: 1
   port: 3000
   metricsPort: 9464

@@ -607,7 +607,7 @@ services:
 
   gotenberg:
     # 9.x drops the bundled JRE (Java4Shell, CVE-2026-114938)
-    image: gotenberg/gotenberg:9.9.3
+    image: gotenberg/gotenberg:9.10.3
     command:
       [
         "gotenberg",
@@ -698,7 +698,7 @@ services:
       retries: 3
 
   seaweedfs-init:
-    image: amazon/aws-cli:2.42.2
+    image: amazon/aws-cli:2.42.5
     depends_on:
       seaweedfs: { condition: service_healthy }
     environment:
@@ -836,7 +836,7 @@ services:
       - "traefik.http.routers.hasura.tls=true"
 
   traefik:
-    image: traefik:v3.7.20
+    image: traefik:v3.8.0
     command:
       # - "--log.level=DEBUG"
       - "--log.level=WARN"
@@ -907,7 +907,7 @@ services:
 
   otel-collector:
     profiles: ["monitoring"]
-    image: otel/opentelemetry-collector:0.165.0
+    image: otel/opentelemetry-collector:0.166.0
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./infra/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
@@ -950,7 +950,7 @@ services:
 
   loki:
     profiles: ["monitoring"]
-    image: grafana/loki:3.7.10
+    image: grafana/loki:3.7.11
     command:
       ["-config.file=/etc/loki/local-config.yaml", "-config.expand-env=true"]
     environment:
@@ -977,7 +977,7 @@ services:
 
   grafana:
     profiles: ["monitoring"]
-    image: grafana/grafana:13.3.1
+    image: grafana/grafana:13.3.2
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       # Viewer, not Editor: Explore (ad-hoc Loki/Postgres queries over every container's logs) stays off
@@ -1162,7 +1162,7 @@ services:
 
   litellm:
     profiles: ["llm"]
-    image: ghcr.io/berriai/litellm:v1.110.2
+    image: ghcr.io/berriai/litellm:v1.111.0
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER_URLENC:-${POSTGRES_USER}}:${POSTGRES_PASSWORD_URLENC:-${POSTGRES_PASSWORD}}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/litellm
       - STORE_MODEL_IN_DB=True
@@ -1202,7 +1202,7 @@ services:
 
   phoenix:
     profiles: ["llm"]
-    image: arizephoenix/phoenix:22.0.1
+    image: arizephoenix/phoenix:22.1.0
     environment:
       - PHOENIX_WORKING_DIR=/data
       - PHOENIX_HOST_ROOT_PATH=/phoenix

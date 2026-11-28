@@ -170,7 +170,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: seaweedfs-init
-          image: amazon/aws-cli:2.42.2
+          image: amazon/aws-cli:2.42.5
           command:
             - /bin/sh
             - -c
