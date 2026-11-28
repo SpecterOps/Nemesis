@@ -175,5 +175,7 @@ spec:
   {{- if .Values.ingress.tls.enabled }}
   tls:
     secretName: {{ .Values.ingress.tls.secretName }}
+    options:
+      name: nemesis-tls
   {{- end }}
 {{- end }}

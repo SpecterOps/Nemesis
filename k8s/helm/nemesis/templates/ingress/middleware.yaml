@@ -122,4 +122,25 @@ spec:
     prefixes:
       - /phoenix
 {{- end }}
+{{- if .Values.ingress.tls.enabled }}
+---
+# TLS 1.2 and 1.3 only; TLS 1.2 limited to forward-secret AEAD ciphers (no CBC/SHA-1 suites). Referenced by
+# the IngressRoute, so the cluster's default TLS options stay untouched.
+apiVersion: traefik.io/v1alpha1
+kind: TLSOption
+metadata:
+  name: nemesis-tls
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  minVersion: VersionTLS12
+  cipherSuites:
+    - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+    - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+    - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+    - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+{{- end }}
 {{- end }}
