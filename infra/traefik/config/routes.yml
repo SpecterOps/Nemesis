@@ -1,0 +1,129 @@
+# Every Nemesis route. Traefik has no Docker provider and so no access to the Docker socket (on the one
+# internet-facing container, even a read-only socket mount would allow starting containers, i.e. root on the
+# host); services are reached by their Compose service name instead of container labels.
+#
+# Routes for services in a profile that isn't running (jupyter, monitoring, llm) answer 502 Bad Gateway, behind
+# the Nemesis login like everything else. Middlewares are in auth.yml, rabbitmq.yml and cross-site.yml.
+http:
+  routers:
+    frontend:
+      rule: PathPrefix(`/`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: frontend
+    web-api:
+      rule: PathPrefix(`/api`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: web-api
+    hasura:
+      rule: PathPrefix(`/hasura`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth, hasura-stripprefix]
+      service: hasura
+    rabbitmq-ui:
+      rule: PathPrefix(`/rabbitmq`)
+      entryPoints: [websecure]
+      tls: {}
+      # Nemesis login, then Traefik swaps in the RabbitMQ credentials (rabbitmq.yml)
+      middlewares: [rabbitmq-auth, rabbitmq-credentials]
+      service: rabbitmq-ui
+    rabbitmq-ui-public:
+      # The UI fetches these two endpoints before its login form exists, sending "Authorization: null"
+      rule: Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`)
+      priority: 100
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [rabbitmq-anonymous]
+      service: rabbitmq-ui
+    # --profile jupyter
+    jupyter:
+      rule: PathPrefix(`/jupyter`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: jupyter
+    # --profile monitoring
+    jaeger:
+      rule: PathPrefix(`/jaeger`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: jaeger
+    grafana:
+      rule: PathPrefix(`/grafana`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: grafana
+    prometheus:
+      rule: PathPrefix(`/prometheus`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: prometheus
+    # --profile llm
+    mcp:
+      rule: PathPrefix(`/mcp`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: mcp
+    litellm:
+      rule: PathPrefix(`/llm`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth]
+      service: litellm
+    phoenix:
+      rule: PathPrefix(`/phoenix`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [auth, phoenix-stripprefix]
+      service: phoenix
+
+  middlewares:
+    hasura-stripprefix:
+      stripPrefix:
+        prefixes: [/hasura]
+    phoenix-stripprefix:
+      stripPrefix:
+        prefixes: [/phoenix]
+
+  services:
+    frontend:
+      loadBalancer:
+        servers: [{url: "http://frontend:3000"}]
+    web-api:
+      loadBalancer:
+        servers: [{url: "http://web-api:8000"}]
+    hasura:
+      loadBalancer:
+        servers: [{url: "http://hasura:8080"}]
+    rabbitmq-ui:
+      loadBalancer:
+        servers: [{url: "http://rabbitmq:15672"}]
+    jupyter:
+      loadBalancer:
+        servers: [{url: "http://jupyter:8888"}]
+    jaeger:
+      loadBalancer:
+        servers: [{url: "http://jaeger:16686"}]
+    grafana:
+      loadBalancer:
+        servers: [{url: "http://grafana:3000"}]
+    prometheus:
+      loadBalancer:
+        servers: [{url: "http://prometheus:9090"}]
+    mcp:
+      loadBalancer:
+        servers: [{url: "http://agents:5000"}]
+    litellm:
+      loadBalancer:
+        servers: [{url: "http://litellm:4000"}]
+    phoenix:
+      loadBalancer:
+        servers: [{url: "http://phoenix:6006"}]

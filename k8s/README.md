@@ -183,7 +183,7 @@ Both require Docker to build images.
 | Dapr sidecars | Manual `-dapr` containers | Operator-injected via pod annotations |
 | Dapr control plane | Standalone placement + scheduler | K8s Dapr installation manages these |
 | Secrets | `.env` file + `secretstores.local.env` | K8s Secrets + `secretstores.kubernetes` |
-| Reverse proxy | Traefik container with Docker provider | Traefik with IngressRoute CRDs |
+| Reverse proxy | Traefik container with file-provider routes (infra/traefik/config/routes.yml) | Traefik with IngressRoute CRDs |
 | Autoscaling | Manual `docker compose up --scale` | KEDA ScaledObjects on RabbitMQ queue depth |
 | Connection pooling | Per-service pools only | PgBouncer (transaction mode) between services and PostgreSQL |
 | Service discovery | Docker DNS | K8s Service DNS |

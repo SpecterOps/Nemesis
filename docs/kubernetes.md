@@ -168,7 +168,7 @@ Options:
 | Dapr sidecars | Manual `-dapr` containers | Operator-injected via pod annotations |
 | Dapr control plane | Standalone scheduler (also serves actor placement) | Helm-installed Dapr (scheduler serves placement) |
 | Secrets | `.env` file + `secretstores.local.env` | K8s Secrets + `secretstores.kubernetes` |
-| Reverse proxy | Traefik container with Docker provider | Traefik with IngressRoute CRDs |
+| Reverse proxy | Traefik container with file-provider routes (infra/traefik/config/routes.yml) | Traefik with IngressRoute CRDs |
 | Autoscaling | Manual `docker compose up --scale` | KEDA ScaledObjects on RabbitMQ queue depth |
 | Connection pooling | Per-service pools only | PgBouncer (transaction mode) between services and PostgreSQL |
 | Service discovery | Docker DNS | K8s Service DNS |

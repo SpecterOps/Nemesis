@@ -1,6 +1,4 @@
-# The Nemesis login (HTTP basic auth) that every router except the public RabbitMQ endpoints requires.
-# Defined here, not as a label on the Traefik container, so that container needs no `traefik.enable=true`:
-# that label made the Docker provider add an unauthenticated default router for Traefik itself.
+# The Nemesis login (HTTP basic auth) that every router in routes.yml except the public RabbitMQ endpoints requires.
 # BASIC_AUTH_USERS is a comma-separated list of user:hash entries (see env.example).
 http:
   middlewares:

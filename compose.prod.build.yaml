@@ -49,8 +49,6 @@ services:
       context: ./projects/frontend/
       dockerfile: Dockerfile
       target: prod
-    labels:
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
   jupyter:
     image: !reset null

@@ -80,8 +80,6 @@ services:
       - ./projects/frontend/src:/app/src:ro
       - ./projects/frontend/vite.config.js:/app/vite.config.js:ro
       - ./version.json:/version.json:ro
-    labels:
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
   jupyter:
     image: !reset null
