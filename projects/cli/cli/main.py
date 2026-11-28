@@ -203,8 +203,23 @@ def get_os_user_and_host_string() -> str:
 @click.option("-h", "--host", default="0.0.0.0:7443", help="Host and port in format HOST:PORT", show_default=True)
 @click.option("-r", "--recursive", is_flag=True, default=False, help="Recursively process subdirectories")
 @click.option("-w", "--workers", default=10, help="Number of worker threads", show_default=True)
-@click.option("-u", "--username", default="n", help="Basic auth username", show_default=True)
-@click.option("-p", "--password", default="n", help="Basic auth password", show_default=True)
+@click.option(
+    "-u",
+    "--username",
+    default="n",
+    envvar="NEMESIS_USER",
+    show_envvar=True,
+    help="Nemesis login username",
+    show_default=True,
+)
+@click.option(
+    "-p",
+    "--password",
+    required=True,
+    envvar="NEMESIS_PASSWORD",
+    show_envvar=True,
+    help="Nemesis login password (NEMESIS_PASSWORD in the Nemesis .env)",
+)
 @click.option("-s", "--source", default=None, help="Source name for metadata (e.g., 'host://HOST1')", show_default=True)
 @click.option("-j", "--project", default="assess-test", help="Project name for metadata", show_default=True)
 @click.option(
@@ -321,8 +336,23 @@ def submit(
 @click.argument("path", type=click.Path(exists=True, file_okay=False, dir_okay=True), required=True)
 @click.option("--debug", is_flag=True, help="Enable debug logging")
 @click.option("-h", "--host", default="0.0.0.0:7443", help="Host and port in format HOST:PORT", show_default=True)
-@click.option("-u", "--username", default="n", help="Basic auth username", show_default=True)
-@click.option("-p", "--password", default="n", help="Basic auth password", show_default=True)
+@click.option(
+    "-u",
+    "--username",
+    default="n",
+    envvar="NEMESIS_USER",
+    show_envvar=True,
+    help="Nemesis login username",
+    show_default=True,
+)
+@click.option(
+    "-p",
+    "--password",
+    required=True,
+    envvar="NEMESIS_PASSWORD",
+    show_envvar=True,
+    help="Nemesis login password (NEMESIS_PASSWORD in the Nemesis .env)",
+)
 @click.option("--project", default="assess-test", help="Project name for metadata", show_default=True)
 @click.option("--source", help="Source name for metadata")
 @click.option(

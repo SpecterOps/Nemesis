@@ -21,6 +21,8 @@ ACTIONS = ("start", "stop", "clean")
 
 # Secrets the compose files require (${NAME:?}) that nemesis-ctl generates when unset
 GENERATED_SECRETS = ("HASURA_ADMIN_SECRET", "LITELLM_SALT_KEY", "LITELLM_ADMIN_PASSWORD")
+# Derived at start from NEMESIS_PASSWORD; also required by compose.yaml
+NEMESIS_LOGIN = "NEMESIS_LOGIN_HTPASSWD"
 URL_CREDENTIALS = ("POSTGRES_USER", "POSTGRES_PASSWORD", "RABBITMQ_USER", "RABBITMQ_PASSWORD")
 POSTGRES_VOLUME = "nemesis_postgres_data"
 DEFAULT_WAIT_TIMEOUT = 600  # seconds
@@ -198,16 +200,21 @@ class Controller:
         # this deployment already has data that may have been encrypted with it.
         envfile.ensure_litellm_salt_key(self.env_file, self._postgres_data_exists(), self.environ)
         envfile.ensure_random_env_secret(self.env_file, "LITELLM_ADMIN_PASSWORD", self.environ, ["admin123"])
+        # The Nemesis login (user NEMESIS_USER, default "n"); "n" was the old public default password
+        envfile.ensure_random_env_secret(self.env_file, "NEMESIS_PASSWORD", self.environ, ["n"])
         envfile.warn_if_env_file_shared(self.env_file)
         try:
             self.environ.update(envfile.url_encoded_credentials(self.env_file, URL_CREDENTIALS, self.environ))
+            self.environ[NEMESIS_LOGIN] = envfile.nemesis_login_htpasswd(self.env_file, self.environ)
         except envfile.EnvFileError as e:
             raise CtlError(str(e)) from e
 
     def prepare_down_secrets(self) -> None:
         """stop/clean/status never generate or write secrets (a `clean` must not settle a salt for a volume
         it is about to delete), but compose still interpolates the file, so supply throwaway values."""
-        self.environ.update(envfile.placeholders_for_compose_down(self.env_file, GENERATED_SECRETS, self.environ))
+        self.environ.update(
+            envfile.placeholders_for_compose_down(self.env_file, (*GENERATED_SECRETS, NEMESIS_LOGIN), self.environ)
+        )
 
     def write_version_info(self) -> None:
         self.echo("Generating version information...")

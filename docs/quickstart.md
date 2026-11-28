@@ -61,7 +61,7 @@ If you'd like to install the monitoring services, jupyter notebooks, and/or LLM 
 
 ### Step 4: Access the Web Dashboard
 
-In a web browser, open `https://localhost:7443/` (or the URL Nemesis is hosted on) to access the main Nemesis web interface. Use `n:n` for basic auth unless you specified users. Upon logging in, you will enter your username and project (this is saved in your browser cache and only needed once):
+In a web browser, open `https://localhost:7443/` (or the URL Nemesis is hosted on) to access the main Nemesis web interface. Log in as `n` with the `NEMESIS_PASSWORD` from your `.env` file, which `nemesis-ctl.sh` generates on the first start (or your own `NEMESIS_USER`/`NEMESIS_PASSWORD`, or a user from `BASIC_AUTH_USERS`). Upon logging in, you will enter your username and project (this is saved in your browser cache and only needed once):
 
 ![Nemesis Username and Project](images/nemesis-dashboard-username-and-project.png)
 

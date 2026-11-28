@@ -531,7 +531,7 @@ networking:
         assert cfg.nemesis.url.hostname == "nemesis.local"
         assert cfg.nemesis.url.port == 7443
         assert cfg.nemesis.credential.username == "n"
-        assert cfg.nemesis.credential.password == "n"
+        assert cfg.nemesis.credential.password == "change-me"  # a placeholder: the real one is generated per deployment
         assert cfg.nemesis.expiration_days == 100
         assert cfg.nemesis.max_file_size == 1_000_000_000
 

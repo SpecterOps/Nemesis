@@ -120,7 +120,8 @@ The `./tools/submit.sh` script wraps the docker syntax automatically.
 # Submit directory recursively (-r or --recursive)
 ./tools/submit.sh -r /path/to/directory/
 
-# Submit directory, changing the Nemesis server (default is localhost) and credentials (default is n:n)
+# Submit directory, changing the Nemesis server (default is localhost) and credentials (user default n; the password
+# is NEMESIS_PASSWORD from the Nemesis .env, also read from the NEMESIS_PASSWORD environment variable)
 ./tools/submit.sh /path/to/directory/ \
   --host nemesis.example.com:7443 \
   --username your-username \

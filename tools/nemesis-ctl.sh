@@ -128,14 +128,17 @@ if [ "$ACTION" = "start" ]; then
   fi
   ensure_litellm_salt_key .env "$POSTGRES_DATA_EXISTS"
   ensure_random_env_secret .env LITELLM_ADMIN_PASSWORD admin123
+  # The Nemesis login (user NEMESIS_USER, default "n"); "n" was the old public default password
+  ensure_random_env_secret .env NEMESIS_PASSWORD n
   warn_if_env_file_shared .env
   export_url_encoded_credentials .env POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD || exit 1
+  export_nemesis_login .env || exit 1
 else
   # stop/clean never generate or write secrets (a `clean` must not settle a salt for a volume it is
   # about to delete) and don't need the URL-encoded credentials, which only matter to running services.
   # `down` still interpolates the compose file, so supply throwaway values for required secrets that
   # were never generated.
-  export_placeholders_for_compose_down .env "${GENERATED_SECRETS[@]}"
+  export_placeholders_for_compose_down .env "${GENERATED_SECRETS[@]}" NEMESIS_LOGIN_HTPASSWD
 fi
 
 # --- Build Command ---

@@ -32,3 +32,11 @@ def test_mythic_help_shows_db_path(monkeypatch, tmp_path):
     assert "db.path" in result.output
     assert str(Path(tmp_path) / "xdg" / "nemesis" / "connectors") in result.output
     assert "cache_db_path" not in result.output
+
+
+@pytest.mark.parametrize("command", ["submit", "monitor"])
+def test_password_is_required_without_a_public_default(command, tmp_path, monkeypatch):
+    monkeypatch.delenv("NEMESIS_PASSWORD", raising=False)
+    result = CliRunner().invoke(cli, [command, str(tmp_path)])
+    assert result.exit_code == 2
+    assert "--password" in result.output and "NEMESIS_PASSWORD" in result.output

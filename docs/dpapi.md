@@ -133,7 +133,7 @@ DPAPI artifacts are automatically processed when:
 `POST /api/dpapi/credentials` takes the same credential types. Every request must include a non-empty `project`:
 
 ```bash
-curl -k -u n:n -H 'Content-Type: application/json' https://nemesis:7443/api/dpapi/credentials \
+curl -k -u "n:$NEMESIS_PASSWORD" -H 'Content-Type: application/json' https://nemesis:7443/api/dpapi/credentials \
   -d '{"type": "dpapi_system", "project": "ASSESS-123", "value": "<80 hex characters>"}'
 ```
 

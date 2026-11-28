@@ -811,6 +811,8 @@ services:
       # Drop request headers whose names alias another one (X_Auth_User or X.Auth.User for X-Auth-User), so a client
       # can't smuggle a header that a backend reads under the name of a header Traefik manages
       - "--entrypoints.websecure.http.aliasheadersstrategy=delete"
+      # Per-client request rate limit on every route (auth.yml), so the login can't be guessed at full speed
+      - "--entrypoints.websecure.http.middlewares=rate-limit@file"
       - "--entrypoints.metrics.http.aliasheadersstrategy=delete"
       # Encoded characters in request paths: no backend needs an encoded NUL or backslash, so reject those; keep the
       # rest, which the RabbitMQ UI (vhost "/" as %2F) and Jupyter (file names) put into paths
@@ -834,7 +836,10 @@ services:
       - "--metrics.prometheus.addrouterslabels=true"
     environment:
       # Used by infra/traefik/config/auth.yml (the Nemesis login)
-      - BASIC_AUTH_USERS=${BASIC_AUTH_USERS:-n:$$apr1$$RbnOjtKr$$S706SPJ3KzCKIref.gRFT.}
+      # The Nemesis login: NEMESIS_USER / NEMESIS_PASSWORD from .env, hashed by tools/nemesis-ctl.sh (or the CLI)
+      - NEMESIS_LOGIN_HTPASSWD=${NEMESIS_LOGIN_HTPASSWD:?start Nemesis with tools/nemesis-ctl.sh, which sets the login from NEMESIS_PASSWORD in .env}
+      # Optional extra users (user:apr1-hash, comma-separated)
+      - BASIC_AUTH_USERS=${BASIC_AUTH_USERS:-}
       - NEMESIS_PORT=${NEMESIS_PORT:-7443}
       # Used by infra/traefik/config/rabbitmq.yml to log the RabbitMQ UI in behind the Nemesis login
       - RABBITMQ_USER=${RABBITMQ_USER:?}

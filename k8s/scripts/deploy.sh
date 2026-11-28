@@ -77,6 +77,36 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Sets LOGIN_SET (a helm --set-string argument) when a first install has no Nemesis login, which has no default:
+# generates a password, passes its apr1 hash (bcrypt would cost ~50 ms of Traefik CPU per request) and keeps the
+# password in the nemesis-login secret. An installed login is kept (the chart reads it back), as is one given with
+# --set credentials.basicAuthUsers=... or in a --values file.
+ensure_nemesis_login() {
+    LOGIN_SET=""
+    local s f password hash
+    for s in "${EXTRA_SETS[@]+"${EXTRA_SETS[@]}"}"; do
+        [[ "$s" == credentials.basicAuthUsers=* ]] && return 0
+    done
+    for f in "${EXTRA_VALUES[@]+"${EXTRA_VALUES[@]}"}"; do
+        grep -qE '^[[:space:]]*basicAuthUsers:[[:space:]]*"?[^"[:space:]]' "$f" && return 0
+    done
+    kubectl get secret nemesis-basic-auth-secret --namespace "$NAMESPACE" &>/dev/null && return 0
+
+    password="$(openssl rand -hex 24)"
+    hash="$(printf '%s\n' "$password" | openssl passwd -apr1 -stdin)"
+    LOGIN_SET="credentials.basicAuthUsers=n:${hash}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "Dry run: a first install generates the Nemesis login (user n) and stores it in the nemesis-login secret"
+        return 0
+    fi
+    # The password goes through a file descriptor, not the command line (visible in the process list)
+    kubectl create secret generic nemesis-login --namespace "$NAMESPACE" \
+        --from-literal=user=n --from-file=password=<(printf '%s' "$password") \
+        --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    log "Generated the Nemesis login - user: n  password: ${password}"
+    log "  Read it again with: kubectl get secret nemesis-login -n ${NAMESPACE} -o jsonpath='{.data.password}' | base64 -d"
+}
+
 do_install() {
     # Verify namespace exists (created by setup-cluster-k3d.sh or setup-cluster-k3s.sh)
     if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
@@ -142,6 +172,12 @@ do_install() {
     for s in "${EXTRA_SETS[@]+"${EXTRA_SETS[@]}"}"; do
         HELM_CMD+=(--set "$s")
     done
+
+    # The Nemesis login (no default): generated on a first install without one
+    ensure_nemesis_login
+    if [[ -n "$LOGIN_SET" ]]; then
+        HELM_CMD+=(--set-string "$LOGIN_SET")
+    fi
 
     if [[ "$DRY_RUN" == "true" ]]; then
         HELM_CMD+=(--dry-run --debug)

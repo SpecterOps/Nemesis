@@ -32,6 +32,7 @@ RECORDED_VARS = [
     "POSTGRES_PASSWORD_URLENC",
     "RABBITMQ_USER_URLENC",
     "RABBITMQ_PASSWORD_URLENC",
+    "NEMESIS_LOGIN_HTPASSWD",
 ]
 
 STUB_DOCKER = (
@@ -85,12 +86,16 @@ def stub_path(tmp_path):
     return bin_dir
 
 
-def mask_secrets(text: str) -> str:
-    """Random secrets differ between runs; keep their shape."""
-    return re.sub(r"[0-9a-f]{48}", "<random48>", text)
+def mask_secrets(text: str, mask_logins: bool = True) -> str:
+    """Random secrets differ between runs (and so does the login hashed from a random password); keep their shape."""
+    text = re.sub(r"[0-9a-f]{48}", "<random48>", text)
+    if not mask_logins:
+        return text
+    # printf %q escapes the $ signs of the hash in the stub log
+    return re.sub(r"(\\?\$apr1\\?\$)[0-9a-f]{8}(\\?\$)[./0-9A-Za-z]{22}", r"\1<salt>\2<hash>", text)
 
 
-def run_both(tmp_path, stub_path, args, *, env_content, extra_env=None):
+def run_both(tmp_path, stub_path, args, *, env_content, extra_env=None, mask_logins=True):
     results = {}
     for impl in ("bash", "python"):
         checkout = make_checkout(tmp_path / impl, env_content)
@@ -124,7 +129,7 @@ def run_both(tmp_path, stub_path, args, *, env_content, extra_env=None):
         env_file = checkout / ".env"
         results[impl] = {
             "rc": rc,
-            "calls": mask_secrets(log.read_text()),
+            "calls": mask_secrets(log.read_text(), mask_logins),
             "env": mask_secrets(env_file.read_text()) if env_file.exists() else None,
             "version": (checkout / "projects" / "frontend" / "public" / "version.json").exists(),
         }
@@ -167,6 +172,29 @@ def test_same_result_with_phoenix_env(tmp_path, stub_path):
     )
     assert py == bash
     assert "PHOENIX_ENABLED=false" in bash["calls"]
+
+
+def test_same_login_hash_for_a_set_password(tmp_path, stub_path):
+    """With NEMESIS_PASSWORD (and NEMESIS_USER) in .env, both hash the login identically (compared unmasked)."""
+    env = ENV_TEMPLATE.format(litellm_password="x") + 'NEMESIS_USER="alice"\nNEMESIS_PASSWORD="correct horse battery"\n'
+    bash, py = run_both(tmp_path, stub_path, ["start", "prod"], env_content=env, mask_logins=False)
+    assert bash["rc"] == 0 and py == bash
+    from cli.ctl.envfile import nemesis_login_htpasswd
+
+    expected = nemesis_login_htpasswd(tmp_path / "python" / ".env", {})
+    assert expected.startswith("alice:$apr1$")
+    assert "NEMESIS_LOGIN_HTPASSWD=" + expected.replace("$", "\\$") in bash["calls"]
+
+
+def test_both_generate_the_login_and_supply_a_placeholder_on_stop(tmp_path, stub_path):
+    env = ENV_TEMPLATE.format(litellm_password="x")
+    bash, py = run_both(tmp_path, stub_path, ["start", "prod"], env_content=env)
+    assert py == bash
+    assert 'NEMESIS_PASSWORD="<random48>"' in bash["env"]
+    assert "NEMESIS_LOGIN_HTPASSWD=n:" in bash["calls"]
+    bash, py = run_both(tmp_path / "stop", stub_path, ["stop", "prod"], env_content=env)
+    assert py == bash
+    assert "NEMESIS_LOGIN_HTPASSWD=unused-by-compose-down" in bash["calls"]
 
 
 def test_both_refuse_invalid_phoenix(tmp_path, stub_path):

@@ -22,7 +22,13 @@ metadata:
     {{- include "nemesis.labels" . | nindent 4 }}
 type: Opaque
 stringData:
-  users: {{ .Values.credentials.basicAuthUsers | quote }}
+  # One user per line (Traefik's secret format)
+  users: |
+    {{- range (splitList "," (include "nemesis.basicAuthUsers" .)) }}
+    {{- if trim . }}
+    {{ trim . }}
+    {{- end }}
+    {{- end }}
 ---
 # /rabbitmq: the Nemesis users plus the RabbitMQ account. The RabbitMQ UI (4.4+) logs in with the RabbitMQ
 # credentials and then sends them in the Authorization header that basic auth reads.
@@ -49,7 +55,7 @@ metadata:
 type: Opaque
 stringData:
   users: |
-    {{- range (splitList "," .Values.credentials.basicAuthUsers) }}
+    {{- range (splitList "," (include "nemesis.basicAuthUsers" .)) }}
     {{- if trim . }}
     {{ trim . }}
     {{- end }}

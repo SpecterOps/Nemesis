@@ -37,7 +37,8 @@ Dapr and KEDA are installed automatically via Helm by the setup script.
 # 3. Verify everything is running
 ./k8s/scripts/verify.sh
 
-# Access Nemesis at https://localhost:7443 (default user: n / password: n)
+# Access Nemesis at https://localhost:7443 as user n with the password deploy.sh prints on first install
+# (also in the nemesis-login secret: kubectl get secret nemesis-login -n nemesis -o jsonpath='{.data.password}' | base64 -d)
 ```
 
 ### Teardown
@@ -78,7 +79,8 @@ Dapr and KEDA are installed automatically via Helm by the setup script.
 # 3. Verify everything is running
 ./k8s/scripts/verify.sh
 
-# Access Nemesis at https://localhost:7443 (default user: n / password: n)
+# Access Nemesis at https://localhost:7443 as user n with the password deploy.sh prints on first install
+# (also in the nemesis-login secret: kubectl get secret nemesis-login -n nemesis -o jsonpath='{.data.password}' | base64 -d)
 ```
 
 ### Teardown

@@ -4,6 +4,7 @@ A port of tools/lib/env_secrets.sh with the same parsing rules and file edits, s
 tool is read identically by the other. Secret values are never printed.
 """
 
+import hashlib
 import re
 import secrets
 import stat
@@ -192,6 +193,66 @@ def url_encoded_credentials(env_file: Path, names: Iterable[str], environ: Mappi
             f"{' '.join(bad)} contain(s) '$', which docker compose expands inside .env values. Use a value without '$'."
         )
     return encoded
+
+
+_APR1_ALPHABET = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+
+def apr1(password: str, salt: str) -> str:
+    """Apache's MD5-based htpasswd hash ($apr1$), as `openssl passwd -apr1 -salt SALT` computes it."""
+    pw, salt_b, magic = password.encode(), salt.encode()[:8], b"$apr1$"
+    ctx = hashlib.md5(pw + magic + salt_b)
+    alternate = hashlib.md5(pw + salt_b + pw).digest()
+    for remaining in range(len(pw), 0, -16):
+        ctx.update(alternate[: min(16, remaining)])
+    bits = len(pw)
+    while bits:
+        ctx.update(b"\0" if bits & 1 else pw[:1])
+        bits >>= 1
+    digest = ctx.digest()
+    for i in range(1000):
+        round_ = hashlib.md5(pw if i & 1 else digest)
+        if i % 3:
+            round_.update(salt_b)
+        if i % 7:
+            round_.update(pw)
+        round_.update(digest if i & 1 else pw)
+        digest = round_.digest()
+
+    def to64(value: int, length: int) -> str:
+        out = ""
+        for _ in range(length):
+            out += _APR1_ALPHABET[value & 0x3F]
+            value >>= 6
+        return out
+
+    d = digest
+    encoded = (
+        to64((d[0] << 16) | (d[6] << 8) | d[12], 4)
+        + to64((d[1] << 16) | (d[7] << 8) | d[13], 4)
+        + to64((d[2] << 16) | (d[8] << 8) | d[14], 4)
+        + to64((d[3] << 16) | (d[9] << 8) | d[15], 4)
+        + to64((d[4] << 16) | (d[10] << 8) | d[5], 4)
+        + to64(d[11], 2)
+    )
+    return f"$apr1${salt_b.decode()}${encoded}"
+
+
+def nemesis_login_htpasswd(env_file: Path, environ: Mapping[str, str]) -> str:
+    """NEMESIS_LOGIN_HTPASSWD for Traefik's basic auth: "<user>:<apr1 hash>" from NEMESIS_USER (default n) and
+    NEMESIS_PASSWORD (environment first, then .env), like tools/lib/env_secrets.sh.
+
+    apr1 rather than bcrypt: Traefik checks the hash on every request, and bcrypt costs ~50 ms of CPU each. The
+    salt derives from the password, so the value is the same at every start and Traefik isn't recreated.
+    """
+    user = current_value(env_file, "NEMESIS_USER", environ) or "n"
+    password = current_value(env_file, "NEMESIS_PASSWORD", environ)
+    if not password:
+        raise EnvFileError("NEMESIS_PASSWORD is not set; set it in .env")
+    if ":" in user:
+        raise EnvFileError("NEMESIS_USER can't contain ':'")
+    salt = hashlib.sha256(f"nemesis-login:{password}".encode("utf-8", "surrogateescape")).hexdigest()[:8]
+    return f"{user}:{apr1(password, salt)}"
 
 
 def placeholders_for_compose_down(env_file: Path, names: Iterable[str], environ: Mapping[str, str]) -> dict[str, str]:

@@ -45,6 +45,7 @@ http:
         # Backends never see the Nemesis password
         removeHeader: true
         users:
+          - {{ env "NEMESIS_LOGIN_HTPASSWD" | quote }}
 {{- range $user := splitList "," (env "BASIC_AUTH_USERS") }}
 {{- if trim $user }}
           - {{ trim $user | quote }}

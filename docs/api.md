@@ -201,17 +201,17 @@ Upload a file using multipart/form-data with metadata.
 
     Example:
     ```
-    curl -k -u n:n -F "file=@example.txt"          -F 'metadata={"agent_id":"agent123","project":"proj1","timestamp":"2024-01-29T12:00:00Z","expiration":"2024-02-29T12:00:00Z","path":"/tmp/example.txt"}'          https://nemesis:7443/api/files
+    curl -k -u "n:$NEMESIS_PASSWORD" -F "file=@example.txt"          -F 'metadata={"agent_id":"agent123","project":"proj1","timestamp":"2024-01-29T12:00:00Z","expiration":"2024-02-29T12:00:00Z","path":"/tmp/example.txt"}'          https://nemesis:7443/api/files
     ```
 
     Example:
     ```
-    curl -k -u n:n -F "file=@example.txt"          -F 'metadata={"agent_id":"agent123","project":"proj1","path":"/tmp/example.txt"}'          https://nemesis:7443/api/files
+    curl -k -u "n:$NEMESIS_PASSWORD" -F "file=@example.txt"          -F 'metadata={"agent_id":"agent123","project":"proj1","path":"/tmp/example.txt"}'          https://nemesis:7443/api/files
     ```
 
     Example with original file times and ownership:
     ```
-    curl -k -u n:n -F "file=@example.txt"          -F 'metadata={"agent_id":"agent123","project":"proj1","path":"/tmp/example.txt","modification_time":"2024-01-28T09:15:00Z","security_info":{"owner":"alice","group":"staff","mode":33188}}'          https://nemesis:7443/api/files
+    curl -k -u "n:$NEMESIS_PASSWORD" -F "file=@example.txt"          -F 'metadata={"agent_id":"agent123","project":"proj1","path":"/tmp/example.txt","modification_time":"2024-01-28T09:15:00Z","security_info":{"owner":"alice","group":"staff","mode":33188}}'          https://nemesis:7443/api/files
     ```
 
 **Request Body:** See OpenAPI spec for details

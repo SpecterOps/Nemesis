@@ -363,3 +363,22 @@ the RabbitMQ password (same derivation as infra/traefik/config/rabbitmq.yml for 
 {{- define "nemesis.rabbitmqUiGate" -}}
 {{ sha256sum (printf "nemesis-rabbitmq-ui:%s" .Values.credentials.rabbitmq.password) }}
 {{- end }}
+
+
+{{/*
+The Nemesis login (comma-separated user:hash entries): credentials.basicAuthUsers, else the users already in
+nemesis-basic-auth-secret (an upgrade keeps the installed login). There is no default login: fail otherwise.
+*/}}
+{{- define "nemesis.basicAuthUsers" -}}
+{{- $users := .Values.credentials.basicAuthUsers | default "" | trim -}}
+{{- if eq $users "" -}}
+{{- $existing := lookup "v1" "Secret" (include "nemesis.namespace" .) "nemesis-basic-auth-secret" -}}
+{{- if and $existing $existing.data (hasKey $existing.data "users") -}}
+{{- $users = index $existing.data "users" | b64dec | trim | splitList "\n" | join "," -}}
+{{- end -}}
+{{- end -}}
+{{- if eq $users "" -}}
+{{- fail "credentials.basicAuthUsers is required (the Nemesis login, user:apr1-hash; there is no default). k8s/scripts/deploy.sh generates one on first install, or set it to: printf 'n:%s' \"$(openssl passwd -apr1 'your-password')\"" -}}
+{{- end -}}
+{{- $users -}}
+{{- end }}

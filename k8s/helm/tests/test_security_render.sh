@@ -7,14 +7,20 @@ CHART="$(cd "$(dirname "${BASH_SOURCE[0]}")/../nemesis" && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# There is no default login: every render passes one (apr1, as deploy.sh generates)
+LOGIN='n:$apr1$abcdefgh$AbCdEfGhIjKlMnOpQrStUv'
+
 render() { # render OUTFILE [helm args...]
   local out=$1
   shift
   helm template nemesis "$CHART" --set llm.enabled=true --set jupyter.enabled=true \
-    --set monitoring.enabled=true "$@" > "$out"
+    --set monitoring.enabled=true --set-string "credentials.basicAuthUsers=$LOGIN" "$@" > "$out"
 }
 
 render "$TMP/default.yaml"
+render "$TMP/two-users.yaml" --set-string "credentials.basicAuthUsers=$LOGIN\\,bob:\$apr1\$x\$y"
+# Without a login (and no installed one to keep), rendering must fail
+if helm template nemesis "$CHART" > "$TMP/no-login.out" 2>&1; then echo "no-login render succeeded" > "$TMP/no-login.status"; else echo "failed" > "$TMP/no-login.status"; fi
 render "$TMP/explicit.yaml" --set credentials.litellm.adminPassword=custom --set credentials.litellm.saltKey=sk-salt
 render "$TMP/legacy.yaml" --set llm.litellm.env.litellmAdminPassword=legacy
 render "$TMP/hosted.yaml" --set ingress.host=nemesis.example
@@ -138,7 +144,14 @@ def mw_names(r):
 rmq = route("PathPrefix(`/rabbitmq`)")
 check("rabbitmq route needs a login first", mw_names(rmq)[:1] == ["nemesis-rabbitmq-auth"])
 rmq_users = find(default, "Secret", "nemesis-rabbitmq-auth-secret")["stringData"]["users"].split()
-check("rabbitmq login accepts the Nemesis users", find(default, "Secret", "nemesis-basic-auth-secret")["stringData"]["users"] in rmq_users)
+nemesis_users = find(default, "Secret", "nemesis-basic-auth-secret")["stringData"]["users"].split()
+check("the Nemesis login is the one passed in (no built-in default)", nemesis_users == ["n:$apr1$abcdefgh$AbCdEfGhIjKlMnOpQrStUv"])
+check("rabbitmq login accepts the Nemesis users", all(u in rmq_users for u in nemesis_users))
+check("rendering without a login fails", (tmp / "no-login.status").read_text().strip() == "failed"
+      and "credentials.basicAuthUsers is required" in (tmp / "no-login.out").read_text())
+two = load(tmp / "two-users.yaml") if "load" in globals() else [d for d in yaml.safe_load_all((tmp / "two-users.yaml").read_text()) if d]
+two_users = next(d for d in two if d["kind"] == "Secret" and d["metadata"]["name"] == "nemesis-basic-auth-secret")["stringData"]["users"]
+check("several users become one line each (Traefik's secret format)", two_users.split("\n")[:2] == ["n:$apr1$abcdefgh$AbCdEfGhIjKlMnOpQrStUv", "bob:$apr1$x$y"])
 check("rabbitmq login accepts the RabbitMQ account (bcrypt)", any(u.startswith("nemesis:$2a$") for u in rmq_users))
 check("rabbitmq route swaps in the RabbitMQ credentials", "nemesis-rabbitmq-credentials" in mw_names(rmq))
 creds = find(default, "Middleware", "nemesis-rabbitmq-credentials")["spec"]["headers"]["customRequestHeaders"]

@@ -175,3 +175,38 @@ def test_warn_if_env_file_shared(tmp_path, capsys):
     env.chmod(0o600)
     envfile.warn_if_env_file_shared(env)
     assert capsys.readouterr().err == ""
+
+
+# --- the Nemesis login for Traefik ---
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="openssl not installed")
+@pytest.mark.parametrize(
+    ("password", "salt"),
+    [("pw", "saltsalt"), ("correct horse", "9efa0ad6"), ("", "abc"), ("x" * 40, "12345678"), ("pässwörd", "zzzzzzzz")],
+)
+def test_apr1_matches_openssl(password, salt):
+    expected = subprocess.run(
+        ["openssl", "passwd", "-apr1", "-salt", salt, "-stdin"], input=password + "\n", capture_output=True, text=True
+    ).stdout.strip()
+    assert envfile.apr1(password, salt) == expected
+
+
+def test_login_defaults_user_and_is_stable(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text('NEMESIS_PASSWORD="s3cret"\n')
+    login = envfile.nemesis_login_htpasswd(env, {})
+    assert login.startswith("n:$apr1$") and login == envfile.nemesis_login_htpasswd(env, {})
+    other = envfile.nemesis_login_htpasswd(env, {"NEMESIS_PASSWORD": "different", "NEMESIS_USER": "bob"})
+    assert other.startswith("bob:$apr1$") and other.split("$")[2] != login.split("$")[2]  # salt follows the password
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [("", "NEMESIS_PASSWORD is not set"), ('NEMESIS_USER="a:b"\nNEMESIS_PASSWORD="p"\n', "can't contain")],
+)
+def test_login_errors(tmp_path, content, message):
+    env = tmp_path / ".env"
+    env.write_text(content)
+    with pytest.raises(envfile.EnvFileError, match=message):
+        envfile.nemesis_login_htpasswd(env, {})

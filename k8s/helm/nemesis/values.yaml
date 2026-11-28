@@ -38,9 +38,12 @@ credentials:
     # Encrypts provider credentials LiteLLM stores in its database. Leave empty to generate one on install;
     # never change it after models are added in the LiteLLM UI.
     saltKey: ""
-  # Basic auth users for Traefik (htpasswd format)
-  # Default: n:n
-  basicAuthUsers: "n:$apr1$bcQYJ0ci$QLOjnsYcpoauiEZ5VcXBi/"
+  # The Nemesis login: comma-separated user:hash entries in htpasswd format. There is no default: left empty,
+  # an upgrade keeps the login already installed, and a first install fails unless k8s/scripts/deploy.sh
+  # generated one (it does, and stores the password in the nemesis-login secret). Use apr1 (MD5) hashes, not
+  # bcrypt: Traefik checks the hash on every request, and bcrypt costs ~50 ms of CPU each. To make one:
+  #   printf 'n:%s' "$(openssl passwd -apr1 'your-password')"
+  basicAuthUsers: ""
 
 # ============================================
 # Nemesis settings

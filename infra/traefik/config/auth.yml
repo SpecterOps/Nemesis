@@ -1,5 +1,6 @@
 # The Nemesis login (HTTP basic auth) that every router in routes.yml except the public RabbitMQ endpoints requires.
-# BASIC_AUTH_USERS is a comma-separated list of user:hash entries (see env.example).
+# NEMESIS_LOGIN_HTPASSWD is NEMESIS_USER / NEMESIS_PASSWORD from .env, hashed by tools/nemesis-ctl.sh (apr1; bcrypt
+# would cost ~50 ms of CPU per request). BASIC_AUTH_USERS optionally adds more user:hash entries (see env.example).
 http:
   middlewares:
     auth:
@@ -7,8 +8,15 @@ http:
         # Backends never see the Nemesis password
         removeHeader: true
         users:
+          - {{ env "NEMESIS_LOGIN_HTPASSWD" | quote }}
 {{- range $user := splitList "," (env "BASIC_AUTH_USERS") }}
 {{- if trim $user }}
           - {{ trim $user | quote }}
 {{- end }}
 {{- end }}
+    # Applied to the whole websecure entry point: a per-client cap far above what the UI or the CLI needs,
+    # so the login can't be guessed at full speed (failed logins are in the access log)
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 200

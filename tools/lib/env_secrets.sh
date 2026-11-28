@@ -177,6 +177,34 @@ export_url_encoded_credentials() {
 # environment or ENV_FILE, so a deployment that never started (or has no .env) can still be torn down.
 # Nothing is written to ENV_FILE and nothing is generated there.
 # Usage: export_placeholders_for_compose_down ENV_FILE NAME...
+# Export NEMESIS_LOGIN_HTPASSWD, the Nemesis login for Traefik's basic auth: "<user>:<apr1 hash>" from
+# NEMESIS_USER (default n) and NEMESIS_PASSWORD (shell environment first, then ENV_FILE).
+# apr1 rather than bcrypt: Traefik checks the hash on every request, and bcrypt costs ~50 ms of CPU each.
+# The salt derives from the password, so the value is the same at every start and Traefik isn't recreated.
+export_nemesis_login() {
+  local env_file=$1 user password salt hash
+  user="${NEMESIS_USER:-}"
+  [ -n "$user" ] || user="$(env_file_value "$env_file" NEMESIS_USER)"
+  user="${user:-n}"
+  password="${NEMESIS_PASSWORD:-}"
+  [ -n "$password" ] || password="$(env_file_value "$env_file" NEMESIS_PASSWORD)"
+  if [ -z "$password" ]; then
+    echo "Error: NEMESIS_PASSWORD is not set; set it in .env" >&2
+    return 1
+  fi
+  if [[ "$user" == *:* ]]; then
+    echo "Error: NEMESIS_USER can't contain ':'" >&2
+    return 1
+  fi
+  salt="$(printf 'nemesis-login:%s' "$password" | openssl dgst -sha256 -r | cut -c1-8)"
+  hash="$(printf '%s\n' "$password" | openssl passwd -apr1 -salt "$salt" -stdin)"
+  if [ -z "$salt" ] || [[ "$hash" != '$apr1$'* ]]; then
+    echo "Error: could not hash NEMESIS_PASSWORD (is openssl installed?)" >&2
+    return 1
+  fi
+  export "NEMESIS_LOGIN_HTPASSWD=${user}:${hash}"
+}
+
 export_placeholders_for_compose_down() {
   local env_file=$1 name value
   shift

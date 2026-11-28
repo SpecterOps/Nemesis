@@ -261,7 +261,7 @@ You can submit files using Nemesis's `submit` CLI tool:
 
 Uploading a file with curl:
 ```bash
-curl -k -u n:n -F "file=@example.txt" \
+curl -k -u "n:$NEMESIS_PASSWORD" -F "file=@example.txt" \
         -F 'metadata={"agent_id":"agent123","project":"assess-test","timestamp":"2025-01-29T12:00:00Z","expiration":"2026-02-29T12:00:00Z","path":"/data/files"}' \
         https://nemesis:7443/api/files
 ```

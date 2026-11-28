@@ -17,7 +17,8 @@ nemesis:
   url: "https://nemesis.local:7443/"
   credential:
     username: "n"
-    password: "n"
+    # NEMESIS_PASSWORD from the Nemesis .env (generated on first start)
+    password: "change-me"
   expiration_days: 100 # After how many days will uploaded files be deleted
   max_file_size: 1000000000 # 1GB
   # Optional PEM file of CAs to trust for Nemesis instead of the system trust store.
