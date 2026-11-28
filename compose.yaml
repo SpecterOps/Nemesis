@@ -850,6 +850,27 @@ services:
       - "--entrypoints.websecure.address=:443"
       # Metrics for Prometheus on an internal-only entrypoint (not published); no API/dashboard is served
       - "--entrypoints.metrics.address=:8082"
+      # Drop request headers whose names alias another one (X_Auth_User or X.Auth.User for X-Auth-User), so a client
+      # can't smuggle a header that a backend reads under the name of a header Traefik manages
+      - "--entrypoints.websecure.http.aliasheadersstrategy=delete"
+      - "--entrypoints.metrics.http.aliasheadersstrategy=delete"
+      # Encoded characters in request paths: no backend needs an encoded NUL or backslash, so reject those; keep the
+      # rest, which the RabbitMQ UI (vhost "/" as %2F) and Jupyter (file names) put into paths
+      - "--entrypoints.websecure.http.encodedcharacters.allowencodednullcharacter=false"
+      - "--entrypoints.websecure.http.encodedcharacters.allowencodedbackslash=false"
+      - "--entrypoints.websecure.http.encodedcharacters.allowencodedslash=true"
+      - "--entrypoints.websecure.http.encodedcharacters.allowencodedsemicolon=true"
+      - "--entrypoints.websecure.http.encodedcharacters.allowencodedpercent=true"
+      - "--entrypoints.websecure.http.encodedcharacters.allowencodedquestionmark=true"
+      - "--entrypoints.websecure.http.encodedcharacters.allowencodedhash=true"
+      # The metrics entrypoint only serves /metrics: no encoded characters at all
+      - "--entrypoints.metrics.http.encodedcharacters.allowencodednullcharacter=false"
+      - "--entrypoints.metrics.http.encodedcharacters.allowencodedbackslash=false"
+      - "--entrypoints.metrics.http.encodedcharacters.allowencodedslash=false"
+      - "--entrypoints.metrics.http.encodedcharacters.allowencodedsemicolon=false"
+      - "--entrypoints.metrics.http.encodedcharacters.allowencodedpercent=false"
+      - "--entrypoints.metrics.http.encodedcharacters.allowencodedquestionmark=false"
+      - "--entrypoints.metrics.http.encodedcharacters.allowencodedhash=false"
       - "--metrics.prometheus=true"
       - "--metrics.prometheus.entrypoint=metrics"
       - "--metrics.prometheus.addrouterslabels=true"
