@@ -395,8 +395,8 @@ install_traefik() {
 
     helm install traefik traefik/traefik \
         --namespace kube-system \
-        --version 42.4.2 \
-        --set "image.tag=v3.7.20" \
+        --version 43.0.0 \
+        --set "image.tag=v3.8.0" \
         --set "service.spec.type=LoadBalancer" \
         --set "service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-type=nlb" \
         --set "service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme=internet-facing" \

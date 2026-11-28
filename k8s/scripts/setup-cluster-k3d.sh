@@ -87,8 +87,8 @@ install_traefik() {
 
     helm install traefik traefik/traefik \
         --namespace kube-system \
-        --version 42.4.2 \
-        --set "image.tag=v3.7.20" \
+        --version 43.0.0 \
+        --set "image.tag=v3.8.0" \
         --set "ports.websecure.nodePort=30443" \
         --set "ports.websecure.expose.default=true" \
         --set "ports.web=null" \

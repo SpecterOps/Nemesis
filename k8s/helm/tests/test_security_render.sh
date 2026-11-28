@@ -208,7 +208,7 @@ for script in ("setup-cluster-k3d.sh", "setup-cluster-k3s.sh", "setup-cluster-ek
     text = (repo / "k8s/scripts" / script).read_text()
     check(f"{script}: Traefik has no plain-HTTP entrypoint", '--set "ports.web=null"' in text)
     check(f"{script}: Traefik dashboard/API disabled", '--set "api.dashboard=false"' in text)
-    check(f"{script}: Traefik pinned to v3.7.20", '--set "image.tag=v3.7.20"' in text)
+    check(f"{script}: Traefik pinned to v3.8.0", '--set "image.tag=v3.8.0"' in text)
     check(f"{script}: Dapr scheduler serves actor placement", "--set global.scheduler.placement.enabled=true" in text)
     check(f"{script}: Traefik metrics get a ClusterIP Service", '--set "metrics.prometheus.service.enabled=true"' in text)
     check(f"{script}: Traefik metrics port is not exposed on the public Service", "ports.metrics.expose" not in text)

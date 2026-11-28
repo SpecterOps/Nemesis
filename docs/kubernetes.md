@@ -179,7 +179,7 @@ Options:
 
 Both `setup-cluster-k3d.sh` and `setup-cluster-k3s.sh` install the same Helm components:
 
-- **Traefik** (Helm chart v42.4.2, Traefik v3.7.20) — reverse proxy with TLS termination
+- **Traefik** (Helm chart v43.0.0, Traefik v3.8.0) — reverse proxy with TLS termination
 - **Dapr** (Helm chart v1.19.2) — sidecar injection, pub/sub, workflows, secrets
 - **KEDA** (Helm chart v2.21.1) — event-driven autoscaling from RabbitMQ queue depth
 
