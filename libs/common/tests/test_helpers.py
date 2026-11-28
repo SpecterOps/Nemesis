@@ -108,9 +108,9 @@ class TestGetDriveFromPath:
 
     def test_real_world_chrome_paths(self):
         """Test with real-world Chrome Local State paths."""
-        assert get_drive_from_path("/C:/Users/itadmin/AppData/Local/Google/Chrome/User Data/Local State") == "/C:"
+        assert get_drive_from_path("/C:/Users/alice/AppData/Local/Google/Chrome/User Data/Local State") == "/C:"
         assert (
-            get_drive_from_path("/C/Users/itadmin/AppData/Local/Google/Chrome/User Data/Local State") is None
+            get_drive_from_path("/C/Users/alice/AppData/Local/Google/Chrome/User Data/Local State") is None
         )  # Without colon should fail
         assert (
             get_drive_from_path("/C/DPAPIUser/AppData/Local/Google/Chrome/User Data/Local State") is None

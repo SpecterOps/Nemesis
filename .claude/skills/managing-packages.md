@@ -12,31 +12,31 @@ All commands must be run from the specific project/library directory.
 ### Add a package
 
 ```bash
-cd /home/itadmin/code/Nemesis/{path} && uv add {package}
+cd "$(git rev-parse --show-toplevel)/{path}" && uv add {package}
 ```
 
 ### Add dev dependency
 
 ```bash
-cd /home/itadmin/code/Nemesis/{path} && uv add --dev {package}
+cd "$(git rev-parse --show-toplevel)/{path}" && uv add --dev {package}
 ```
 
 ### Upgrade a package
 
 ```bash
-cd /home/itadmin/code/Nemesis/{path} && uv add {package}@latest
+cd "$(git rev-parse --show-toplevel)/{path}" && uv add {package}@latest
 ```
 
 ### Remove a package
 
 ```bash
-cd /home/itadmin/code/Nemesis/{path} && uv remove {package}
+cd "$(git rev-parse --show-toplevel)/{path}" && uv remove {package}
 ```
 
 ### Sync dependencies
 
 ```bash
-cd /home/itadmin/code/Nemesis/{path} && uv sync
+cd "$(git rev-parse --show-toplevel)/{path}" && uv sync
 ```
 
 ## Project paths

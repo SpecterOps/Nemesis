@@ -228,7 +228,7 @@ Note that the Titus container may need rebuilding: `docker compose build titus-s
 ### Lint
 
 ```bash
-cd /home/itadmin/code/Nemesis && uv run ruff check . --fix && uv run ruff format .
+cd "$(git rev-parse --show-toplevel)" && uv run ruff check . --fix && uv run ruff format .
 ```
 
 ### Tests
