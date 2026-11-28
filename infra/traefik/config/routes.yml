@@ -3,7 +3,8 @@
 # host); services are reached by their Compose service name instead of container labels.
 #
 # Routes for services in a profile that isn't running (jupyter, monitoring, llm) answer 502 Bad Gateway, behind
-# the Nemesis login like everything else. Middlewares are in auth.yml, rabbitmq.yml and cross-site.yml.
+# the Nemesis login like everything else. Middlewares are in auth.yml, rabbitmq.yml and cross-site.yml;
+# the RabbitMQ UI routers are in rabbitmq.yml (they derive a value from RABBITMQ_PASSWORD).
 http:
   routers:
     frontend:
@@ -24,21 +25,7 @@ http:
       tls: {}
       middlewares: [auth, hasura-stripprefix]
       service: hasura
-    rabbitmq-ui:
-      rule: PathPrefix(`/rabbitmq`)
-      entryPoints: [websecure]
-      tls: {}
-      # Nemesis login, then Traefik swaps in the RabbitMQ credentials (rabbitmq.yml)
-      middlewares: [rabbitmq-auth, rabbitmq-credentials]
-      service: rabbitmq-ui
-    rabbitmq-ui-public:
-      # The UI fetches these two endpoints before its login form exists, sending "Authorization: null"
-      rule: Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`)
-      priority: 100
-      entryPoints: [websecure]
-      tls: {}
-      middlewares: [rabbitmq-anonymous]
-      service: rabbitmq-ui
+    # The RabbitMQ UI routers are in rabbitmq.yml
     # --profile jupyter
     jupyter:
       rule: PathPrefix(`/jupyter`)

@@ -122,6 +122,7 @@ for component in ("nemesis-secret-store", "statestore"):
 
 # --- /rabbitmq and /llm behind the Nemesis login ---
 import base64
+import hashlib
 
 routes = find(default, "IngressRoute", "nemesis-ingress")["spec"]["routes"]
 
@@ -151,7 +152,18 @@ check("public rabbitmq route wins over the prefix route", public["priority"] > r
 check("public rabbitmq route strips credentials", mw_names(public) == ["nemesis-rabbitmq-anonymous"])
 anon = find(default, "Middleware", "nemesis-rabbitmq-anonymous")["spec"]["headers"]["customRequestHeaders"]
 check("anonymous middleware removes Authorization", anon == {"Authorization": ""})
-check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r not in (public, rmq) and "Sec-Fetch-Site" not in r["match"]))
+page = route("Path(`/rabbitmq/index.html`)")
+check("rabbitmq UI page needs a login first", mw_names(page)[:2] == ["nemesis-rabbitmq-auth", "nemesis-rabbitmq-credentials"])
+check("rabbitmq UI page wins over the prefix route", rmq["priority"] < page["priority"] < public["priority"])
+check("rabbitmq UI page sets the gate cookie", "nemesis-rabbitmq-ui-gate-cookie" in mw_names(page))
+set_cookie = find(default, "Middleware", "nemesis-rabbitmq-ui-gate-cookie")["spec"]["headers"]["customResponseHeaders"]["Set-Cookie"]
+gate = set_cookie.split(";")[0].removeprefix("nemesis_rabbitmq_ui=")
+check("gate cookie is Secure, HttpOnly, SameSite=Strict, scoped to /rabbitmq",
+      all(a in set_cookie for a in ("Path=/rabbitmq", "Secure", "HttpOnly", "SameSite=Strict")))
+check("gate cookie derives from the RabbitMQ password",
+      gate == hashlib.sha256(b"nemesis-rabbitmq-ui:Qwerty12345").hexdigest())
+check("public rabbitmq route requires the gate cookie", f"nemesis_rabbitmq_ui={gate}" in public["match"] and "HeaderRegexp(`Cookie`" in public["match"])
+check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r not in (public, rmq, page) and "Sec-Fetch-Site" not in r["match"]))
 
 # --- cross-site (CSRF) block, same rule as Compose ---
 compose_rule = " ".join(

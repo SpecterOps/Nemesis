@@ -354,3 +354,12 @@ Every Dapr app except gotenberg, which renders attacker-influenced HTML and must
 - {{ .Values.housekeeping.dapr.appId }}
 - {{ .Values.llm.agents.dapr.appId }}
 {{- end }}
+
+
+{{/*
+Value of the cookie that admits the RabbitMQ UI's two pre-login calls (/api/version, /api/auth): derived from
+the RabbitMQ password (same derivation as infra/traefik/config/rabbitmq.yml for Docker Compose).
+*/}}
+{{- define "nemesis.rabbitmqUiGate" -}}
+{{ sha256sum (printf "nemesis-rabbitmq-ui:%s" .Values.credentials.rabbitmq.password) }}
+{{- end }}

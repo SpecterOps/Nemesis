@@ -5,9 +5,40 @@
 # Traefik's basic auth reads. So the /rabbitmq route accepts the Nemesis users *and* the RabbitMQ account
 # (rabbitmq-auth): log in to the RabbitMQ UI with the RabbitMQ credentials (RABBITMQ_USER / RABBITMQ_PASSWORD).
 # rabbitmq-credentials then sends RabbitMQ the RabbitMQ credentials whichever login was used, so API calls
-# made with the Nemesis login also work. Only /api/version and /api/auth, which RabbitMQ serves to anyone
-# and the UI loads before its login form, skip the login; they get no credentials (rabbitmq-anonymous).
+# made with the Nemesis login also work.
+#
+# The UI loads /api/version and /api/auth before its login form exists, sending "Authorization: null", so
+# those two can't require the login. Instead they require a cookie that only a logged-in browser has: the UI
+# page itself (behind the login) sets it, and its value derives from RABBITMQ_PASSWORD, so it differs per
+# deployment and can't be guessed. Without it, the endpoints are behind the login like the rest of the UI
+# (RabbitMQ itself would serve them, including its version, to anyone).
+{{- $gate := sha256sum (printf "nemesis-rabbitmq-ui:%s" (env "RABBITMQ_PASSWORD")) }}
 http:
+  routers:
+    rabbitmq-ui:
+      rule: PathPrefix(`/rabbitmq`)
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [rabbitmq-auth, rabbitmq-credentials]
+      service: rabbitmq-ui
+    rabbitmq-ui-page:
+      # The UI page: also hands the browser the cookie for the two endpoints below
+      rule: Path(`/rabbitmq`) || Path(`/rabbitmq/`) || Path(`/rabbitmq/index.html`)
+      priority: 90
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [rabbitmq-auth, rabbitmq-credentials, rabbitmq-ui-gate-cookie]
+      service: rabbitmq-ui
+    rabbitmq-ui-public:
+      rule: >-
+        (Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`))
+        && HeaderRegexp(`Cookie`, `(^|;\s*)nemesis_rabbitmq_ui={{ $gate }}\s*(;|$)`)
+      priority: 100
+      entryPoints: [websecure]
+      tls: {}
+      middlewares: [rabbitmq-anonymous]
+      service: rabbitmq-ui
+
   middlewares:
     rabbitmq-auth:
       basicAuth:
@@ -28,3 +59,7 @@ http:
       headers:
         customRequestHeaders:
           Authorization: ""
+    rabbitmq-ui-gate-cookie:
+      headers:
+        customResponseHeaders:
+          Set-Cookie: "nemesis_rabbitmq_ui={{ $gate }}; Path=/rabbitmq; Secure; HttpOnly; SameSite=Strict"

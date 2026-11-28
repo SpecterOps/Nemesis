@@ -76,8 +76,24 @@ spec:
         - name: rabbitmq
           port: 15672
 
-    # Public RabbitMQ endpoints the UI loads before its login form; they get no credentials
-    - match: {{ $hostMatch }}(Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`))
+    # The RabbitMQ UI page: also hands the browser the cookie for the two endpoints below
+    - match: {{ $hostMatch }}(Path(`/rabbitmq`) || Path(`/rabbitmq/`) || Path(`/rabbitmq/index.html`))
+      kind: Rule
+      priority: 15
+      middlewares:
+        - name: nemesis-rabbitmq-auth
+          namespace: {{ include "nemesis.namespace" . }}
+        - name: nemesis-rabbitmq-credentials
+          namespace: {{ include "nemesis.namespace" . }}
+        - name: nemesis-rabbitmq-ui-gate-cookie
+          namespace: {{ include "nemesis.namespace" . }}
+      services:
+        - name: rabbitmq
+          port: 15672
+
+    # RabbitMQ endpoints the UI loads before its login form ("Authorization: null"): only with the cookie the
+    # UI page sets, so only for a browser that passed the login; they get no credentials
+    - match: {{ $hostMatch }}(Path(`/rabbitmq/api/version`) || Path(`/rabbitmq/api/auth`)) && HeaderRegexp(`Cookie`, `(^|;\s*)nemesis_rabbitmq_ui={{ include "nemesis.rabbitmqUiGate" . }}\s*(;|$)`)
       kind: Rule
       priority: 20
       middlewares:

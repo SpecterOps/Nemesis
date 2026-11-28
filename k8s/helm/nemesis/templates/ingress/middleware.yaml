@@ -108,6 +108,20 @@ spec:
   headers:
     customRequestHeaders:
       Authorization: ""
+---
+# Set by the RabbitMQ UI page (behind the login): the cookie that lets the UI's two pre-login calls through.
+# Its value derives from the RabbitMQ password, so it differs per deployment and can't be guessed.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: nemesis-rabbitmq-ui-gate-cookie
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+spec:
+  headers:
+    customResponseHeaders:
+      Set-Cookie: {{ printf "nemesis_rabbitmq_ui=%s; Path=/rabbitmq; Secure; HttpOnly; SameSite=Strict" (include "nemesis.rabbitmqUiGate" .) | quote }}
 {{- if .Values.llm.enabled }}
 ---
 apiVersion: traefik.io/v1alpha1
