@@ -195,3 +195,7 @@ projects/frontend/public/env.js
 projects/titus_scanner/third_party/
 projects/titus_scanner/go.work
 projects/titus_scanner/go.work.sum
+
+# TLS certificates (generated per deployment, or your own): never commit a private key
+infra/traefik/certs/*
+!infra/traefik/certs/README.md

@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from cli.ctl import envfile, health, sizing
+from cli.ctl import envfile, health, sizing, tlscert
 from cli.ctl.config import PROFILES
 
 ACTIONS = ("start", "stop", "clean")
@@ -208,6 +208,13 @@ class Controller:
             self.environ[NEMESIS_LOGIN] = envfile.nemesis_login_htpasswd(self.env_file, self.environ)
         except envfile.EnvFileError as e:
             raise CtlError(str(e)) from e
+        # A self-signed certificate per deployment (none ships with Nemesis); your own server.crt/server.key is kept
+        try:
+            certs = self.project_dir / "infra" / "traefik" / "certs"
+            tlscert.ensure_tls_certificate(certs, self.env_file, self.environ, self.echo)
+        except tlscert.CertError as e:
+            raise CtlError(str(e)) from e
+        self.environ["NEMESIS_TLS_CERT_SHA256"] = tlscert.certificate_fingerprint(certs)
 
     def prepare_down_secrets(self) -> None:
         """stop/clean/status never generate or write secrets (a `clean` must not settle a salt for a volume

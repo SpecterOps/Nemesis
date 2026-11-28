@@ -47,8 +47,8 @@ timezone-aware times.
 
 ## HTTPS Certificate Verification
 
-The CLI and all connectors verify HTTPS certificates by default, against the system trust store. Nemesis ships with a
-self-signed certificate (`infra/traefik/certs/server.crt`). The safest way to use it is to trust that certificate
+The CLI and all connectors verify HTTPS certificates by default, against the system trust store. Nemesis creates a
+self-signed certificate for each deployment on its first start (`infra/traefik/certs/server.crt`). The safest way to use it is to trust that certificate
 explicitly with a CA file (below). Otherwise you must either install a trusted certificate or opt out of verification
 using either:
 

@@ -33,6 +33,7 @@ RECORDED_VARS = [
     "RABBITMQ_USER_URLENC",
     "RABBITMQ_PASSWORD_URLENC",
     "NEMESIS_LOGIN_HTPASSWD",
+    "NEMESIS_TLS_CERT_SHA256",
 ]
 
 STUB_DOCKER = (
@@ -64,6 +65,7 @@ def make_checkout(root: Path, env_content: str | None) -> Path:
     (root / "tools" / "lib").mkdir(parents=True)
     shutil.copy(REPO / "tools" / "nemesis-ctl.sh", root / "tools")
     shutil.copy(REPO / "tools" / "lib" / "env_secrets.sh", root / "tools" / "lib")
+    shutil.copy(REPO / "tools" / "lib" / "tls_cert.sh", root / "tools" / "lib")
     gen = root / "tools" / "generate-version.sh"
     gen.write_text('#!/bin/bash\necho "{}" > "$1"\n')
     (root / "compose.base.yaml").write_text("")
@@ -89,6 +91,8 @@ def stub_path(tmp_path):
 def mask_secrets(text: str, mask_logins: bool = True) -> str:
     """Random secrets differ between runs (and so does the login hashed from a random password); keep their shape."""
     text = re.sub(r"[0-9a-f]{48}", "<random48>", text)
+    # Each checkout gets its own certificate
+    text = re.sub(r"(?:[0-9A-F]{2}\\?:){31}[0-9A-F]{2}", "<cert-sha256>", text)
     if not mask_logins:
         return text
     # printf %q escapes the $ signs of the hash in the stub log
@@ -195,6 +199,25 @@ def test_both_generate_the_login_and_supply_a_placeholder_on_stop(tmp_path, stub
     bash, py = run_both(tmp_path / "stop", stub_path, ["stop", "prod"], env_content=env)
     assert py == bash
     assert "NEMESIS_LOGIN_HTPASSWD=unused-by-compose-down" in bash["calls"]
+
+
+@pytest.mark.skipif(shutil.which("openssl") is None, reason="openssl not installed")
+def test_both_create_the_same_certificate(tmp_path, stub_path):
+    env = ENV_TEMPLATE.format(litellm_password="x") + 'NEMESIS_URL="https://nemesis.corp.local:7443/"\n'
+    bash, py = run_both(tmp_path, stub_path, ["start", "prod"], env_content=env)
+    assert py == bash and bash["rc"] == 0
+    described = []
+    for impl in ("bash", "python"):
+        crt = tmp_path / impl / "infra" / "traefik" / "certs" / "server.crt"
+        described.append(
+            subprocess.run(
+                ["openssl", "x509", "-in", str(crt), "-noout", "-subject", "-ext", "subjectAltName"],
+                capture_output=True, text=True, check=True,
+            ).stdout
+        )  # fmt: skip
+        assert (crt.parent / "server.key").stat().st_mode & 0o777 == 0o600
+    assert described[0] == described[1]
+    assert "CN = nemesis.corp.local" in described[0] and "DNS:nemesis.corp.local" in described[0]
 
 
 def test_both_refuse_invalid_phoenix(tmp_path, stub_path):

@@ -840,6 +840,9 @@ services:
       - NEMESIS_LOGIN_HTPASSWD=${NEMESIS_LOGIN_HTPASSWD:?start Nemesis with tools/nemesis-ctl.sh, which sets the login from NEMESIS_PASSWORD in .env}
       # Optional extra users (user:apr1-hash, comma-separated)
       - BASIC_AUTH_USERS=${BASIC_AUTH_USERS:-}
+      # Fingerprint of infra/traefik/certs/server.crt (set by nemesis-ctl.sh): Traefik loads the certificate only at
+      # startup, so a new certificate changes this value and makes compose recreate Traefik
+      - NEMESIS_TLS_CERT_SHA256=${NEMESIS_TLS_CERT_SHA256:-}
       - NEMESIS_PORT=${NEMESIS_PORT:-7443}
       # Used by infra/traefik/config/rabbitmq.yml to log the RabbitMQ UI in behind the Nemesis login
       - RABBITMQ_USER=${RABBITMQ_USER:?}

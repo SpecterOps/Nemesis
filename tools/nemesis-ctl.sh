@@ -115,6 +115,8 @@ fi
 # --- Secrets ---
 # shellcheck source=lib/env_secrets.sh
 source "${SCRIPT_DIR}/lib/env_secrets.sh"
+# shellcheck source=lib/tls_cert.sh
+source "${SCRIPT_DIR}/lib/tls_cert.sh"
 # Secrets the compose files require (${NAME:?}) that nemesis-ctl generates when unset
 GENERATED_SECRETS=(HASURA_ADMIN_SECRET LITELLM_SALT_KEY LITELLM_ADMIN_PASSWORD)
 if [ "$ACTION" = "start" ]; then
@@ -133,6 +135,9 @@ if [ "$ACTION" = "start" ]; then
   warn_if_env_file_shared .env
   export_url_encoded_credentials .env POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_USER RABBITMQ_PASSWORD || exit 1
   export_nemesis_login .env || exit 1
+  # A self-signed certificate per deployment (none ships with Nemesis); your own server.crt/server.key is kept
+  ensure_tls_certificate infra/traefik/certs .env || exit 1
+  export_tls_certificate_fingerprint infra/traefik/certs
 else
   # stop/clean never generate or write secrets (a `clean` must not settle a salt for a volume it is
   # about to delete) and don't need the URL-encoded credentials, which only matter to running services.

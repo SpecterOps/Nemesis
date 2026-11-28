@@ -43,7 +43,7 @@ Some Nemesis enrichments allow for (or require) configuration. See the [enrichme
 
 **NOTE:** for `APPRISE_URLs` to route user feedback to a specific channel use `?tag=feedback` as shown in the example .env file. Otherwise stock alerts will go to the first URL listed. See the [Alerting](./usage_guide.md#alerting) section of the Usage Guide for more information.
 
-**NOTE:** To use your own SSL certificates, simply replace the `server.crt` and `server.key` files at `./infra/traefik/certs/` before launching Nemesis.
+**NOTE:** On the first start, `nemesis-ctl.sh` creates a self-signed TLS certificate for this deployment in `./infra/traefik/certs/` (no certificate ships with Nemesis). To use your own, put it there as `server.crt` and `server.key` before launching Nemesis; it is never replaced.
 
 ### Step 3: Start Nemesis
 To start Nemesis's core services, run the `./tools/nemesis-ctl.sh` script:
