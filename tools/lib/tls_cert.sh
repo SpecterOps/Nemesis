@@ -2,8 +2,6 @@
 # TLS certificate for Traefik (infra/traefik/certs/server.crt + server.key). Sourced by tools/nemesis-ctl.sh after
 # lib/env_secrets.sh; the CLI port is projects/cli/cli/ctl/tlscert.py and must behave the same.
 
-# The self-signed certificate that used to ship in the repository: its private key is public, so never serve it
-PUBLIC_REPO_CERT_SHA256="F6:15:1C:09:96:94:AB:01:3C:F5:BE:AD:5C:3D:13:22:5D:1E:7B:16:62:BE:4A:36:88:2A:32:CD:83:78:22:6C"
 # Marks certificates this script made, so it renews only its own (a user's certificate only gets a warning)
 SELF_SIGNED_ORG="Nemesis self-signed"
 RENEW_WITHIN_SECONDS=$((30 * 24 * 3600))
@@ -32,17 +30,14 @@ export_tls_certificate_fingerprint() {
 }
 
 # Make sure CERT_DIR holds a usable certificate: create a self-signed one when there is none, renew a self-signed
-# one that expires within 30 days, and replace the certificate that used to ship in the repository. A certificate
-# you supplied is never replaced, only warned about when it is about to expire.
+# one that expires within 30 days. A certificate you supplied is never replaced, only warned about when it is about
+# to expire.
 ensure_tls_certificate() {
-  local cert_dir=$1 env_file=$2 crt key fingerprint host san
+  local cert_dir=$1 env_file=$2 crt key host san
   crt="$cert_dir/server.crt"
   key="$cert_dir/server.key"
   if [ -f "$crt" ] && [ -f "$key" ]; then
-    fingerprint="$(openssl x509 -in "$crt" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
-    if [ "$fingerprint" = "$PUBLIC_REPO_CERT_SHA256" ]; then
-      echo "Replacing the TLS certificate that used to ship with Nemesis (its private key is public)."
-    elif openssl x509 -in "$crt" -noout -checkend "$RENEW_WITHIN_SECONDS" > /dev/null 2>&1; then
+    if openssl x509 -in "$crt" -noout -checkend "$RENEW_WITHIN_SECONDS" > /dev/null 2>&1; then
       return 0
     elif openssl x509 -in "$crt" -noout -subject 2>/dev/null | grep -q "$SELF_SIGNED_ORG"; then
       echo "Renewing the self-signed TLS certificate (it expires within 30 days)."

@@ -1,9 +1,9 @@
 """TLS certificate for Traefik (infra/traefik/certs/server.crt + server.key).
 
 A port of tools/lib/tls_cert.sh (same checks, same certificate, same messages). No certificate ships with Nemesis:
-one is created per deployment on start, renewed when it is a self-signed one about to expire, and the certificate
-that used to ship in the repository (its private key is public) is replaced. A certificate you supplied is never
-replaced, only warned about when it is about to expire. Uses the openssl command, like the bash script.
+one is created per deployment on start and renewed when it is a self-signed one about to expire. A certificate you
+supplied is never replaced, only warned about when it is about to expire. Uses the openssl command, like the bash
+script.
 """
 
 import os
@@ -15,9 +15,6 @@ from pathlib import Path
 
 from cli.ctl.envfile import current_value
 
-PUBLIC_REPO_CERT_SHA256 = (
-    "F6:15:1C:09:96:94:AB:01:3C:F5:BE:AD:5C:3D:13:22:5D:1E:7B:16:62:BE:4A:36:88:2A:32:CD:83:78:22:6C"
-)
 SELF_SIGNED_ORG = "Nemesis self-signed"
 RENEW_WITHIN_SECONDS = 30 * 24 * 3600
 
@@ -61,10 +58,7 @@ def ensure_tls_certificate(
     """Make sure CERT_DIR holds a usable certificate (see the module docstring)."""
     crt, key = cert_dir / "server.crt", cert_dir / "server.key"
     if crt.is_file() and key.is_file():
-        fingerprint = _openssl(["x509", "-in", str(crt), "-noout", "-fingerprint", "-sha256"]).stdout
-        if fingerprint.strip().split("=", 1)[-1] == PUBLIC_REPO_CERT_SHA256:
-            echo("Replacing the TLS certificate that used to ship with Nemesis (its private key is public).")
-        elif _openssl(["x509", "-in", str(crt), "-noout", "-checkend", str(RENEW_WITHIN_SECONDS)]).returncode == 0:
+        if _openssl(["x509", "-in", str(crt), "-noout", "-checkend", str(RENEW_WITHIN_SECONDS)]).returncode == 0:
             return
         elif SELF_SIGNED_ORG in _openssl(["x509", "-in", str(crt), "-noout", "-subject"]).stdout:
             echo("Renewing the self-signed TLS certificate (it expires within 30 days).")

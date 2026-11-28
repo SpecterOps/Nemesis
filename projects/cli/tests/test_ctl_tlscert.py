@@ -1,5 +1,5 @@
-"""TLS certificate per deployment: created when missing, kept when valid, the leaked repository one replaced,
-our own renewed before it expires, a user's never replaced. Uses the real openssl command."""
+"""TLS certificate per deployment: created when missing, kept when valid, our own renewed before it expires, a user's
+never replaced. Uses the real openssl command."""
 
 import shutil
 import subprocess
@@ -57,16 +57,6 @@ def test_keeps_a_valid_certificate(tmp_path, env):
     before = (certs / "server.crt").read_bytes()
     assert run(certs, env) == []
     assert (certs / "server.crt").read_bytes() == before
-
-
-def test_replaces_the_certificate_that_shipped_in_the_repository(tmp_path, env, monkeypatch):
-    certs = tmp_path / "certs"
-    make_cert(certs, "SpecterOps", 365)
-    fingerprint = openssl("x509", "-in", str(certs / "server.crt"), "-noout", "-fingerprint", "-sha256").split("=")[1]
-    monkeypatch.setattr(tlscert, "PUBLIC_REPO_CERT_SHA256", fingerprint.strip())
-    messages = run(certs, env)
-    assert messages[0].startswith("Replacing the TLS certificate that used to ship with Nemesis")
-    assert "O = Nemesis self-signed" in info(certs)
 
 
 def test_renews_its_own_certificate_before_it_expires(tmp_path, env):
