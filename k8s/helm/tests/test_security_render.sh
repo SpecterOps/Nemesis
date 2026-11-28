@@ -178,6 +178,20 @@ check("gate cookie derives from the RabbitMQ password",
 check("public rabbitmq route requires the gate cookie", f"nemesis_rabbitmq_ui={gate}" in public["match"] and "HeaderRegexp(`Cookie`" in public["match"])
 check("every other route needs the Nemesis login", all("nemesis-basic-auth" in mw_names(r) for r in routes if r not in (public, rmq, page) and "Sec-Fetch-Site" not in r["match"]))
 
+# --- log shipping (Alloy): node log files only, no Kubernetes API access ---
+alloy = find(default, "DaemonSet", "alloy")["spec"]["template"]["spec"]
+check("no promtail objects remain", not [d for d in default if "promtail" in d["metadata"]["name"]])
+check("no cluster-wide RBAC for log shipping", not [d for d in default if d["kind"] in ("ClusterRole", "ClusterRoleBinding")])
+check("alloy mounts no ServiceAccount token", alloy.get("automountServiceAccountToken") is False)
+alloy_c = alloy["containers"][0]
+host_paths = {v["name"]: v["hostPath"]["path"] for v in alloy["volumes"] if "hostPath" in v}
+check("alloy's only host path is /var/log/pods", host_paths == {"pods-log": "/var/log/pods"})
+check("alloy mounts the pod logs read-only", any(m["name"] == "pods-log" and m.get("readOnly") for m in alloy_c["volumeMounts"]))
+sc = alloy_c["securityContext"]
+check("alloy drops all capabilities and can't escalate", sc["capabilities"]["drop"] == ["ALL"] and sc["allowPrivilegeEscalation"] is False and sc["readOnlyRootFilesystem"] is True)
+alloy_cfg = find(default, "ConfigMap", "alloy-config")["data"]["config.alloy"]
+check("alloy reads only this namespace's pod logs", '"/var/log/pods/nemesis_*/*/*.log"' in alloy_cfg)
+
 # --- cross-site (CSRF) block, same rule as Compose ---
 compose_rule = " ".join(
     yaml.safe_load(Path(sys.argv[2], "infra/traefik/config/cross-site.yml").read_text())["http"]["routers"]["block-cross-site"]["rule"].split()

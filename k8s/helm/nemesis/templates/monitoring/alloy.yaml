@@ -1,0 +1,132 @@
+{{- define "nemesis.alloyConfig" -}}
+local.file_match "pods" {
+	path_targets = [{"__path__" = "/var/log/pods/{{ include "nemesis.namespace" . }}_*/*/*.log"}]
+	sync_period  = "5s"
+}
+
+loki.source.file "pods" {
+	targets    = local.file_match.pods.targets
+	forward_to = [loki.process.pods.receiver]
+}
+
+loki.process "pods" {
+	// CRI log format: <time> <stream> <F|P> <line>
+	stage.cri { }
+
+	// /var/log/pods/<namespace>_<pod>_<uid>/<container>/<n>.log
+	stage.regex {
+		source     = "filename"
+		expression = "^/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/"
+	}
+
+	stage.labels {
+		values = {
+			namespace = "",
+			pod       = "",
+			container = "",
+		}
+	}
+
+	stage.label_drop {
+		values = ["filename"]
+	}
+
+	// For JSON log lines, their "message" field (as with Promtail)
+	stage.json {
+		expressions = {message = "message"}
+	}
+
+	stage.output {
+		source = "message"
+	}
+
+	forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
+{{- end }}
+{{- if .Values.monitoring.enabled }}
+{{/*
+Container logs to Loki: Grafana Alloy (replaces Promtail) on every node reads this namespace's pod log files from
+/var/log/pods. The path carries the namespace, pod and container, so it needs no Kubernetes API access: no
+ServiceAccount token and no ClusterRole (Promtail had cluster-wide read on pods, nodes, services and endpoints).
+Same labels as Promtail: namespace, pod, container.
+*/}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+data:
+  config.alloy: |
+{{ include "nemesis.alloyConfig" . | indent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: {{ include "nemesis.namespace" . }}
+  labels:
+    {{- include "nemesis.labels" . | nindent 4 }}
+    {{- include "nemesis.selectorLabels" (dict "name" "alloy" "context" .) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "nemesis.selectorLabels" (dict "name" "alloy" "context" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemesis.selectorLabels" (dict "name" "alloy" "context" .) | nindent 8 }}
+      annotations:
+        dapr.io/enabled: "false"
+        checksum/config: {{ include "nemesis.alloyConfig" . | sha256sum | trunc 16 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: alloy
+          image: "{{ .Values.monitoring.alloy.image.repository }}:{{ .Values.monitoring.alloy.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - run
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+            - --disable-reporting
+            - /etc/alloy/config.alloy
+          ports:
+            - name: http-metrics
+              containerPort: 12345
+          securityContext:
+            # Root only to read the node's log files (root-owned, mode 0640); nothing else
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: pods-log
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/alloy/data
+          resources:
+            {{- toYaml .Values.monitoring.alloy.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+        - name: pods-log
+          hostPath:
+            path: /var/log/pods
+        - name: data
+          emptyDir: {}
+{{- end }}

@@ -112,10 +112,11 @@ monitoring:
         cpu: "1"
         memory: 1Gi
 
-  promtail:
+  # Ships container logs to Loki (replaces Promtail); reads the node's pod log files, no Kubernetes API access
+  alloy:
     image:
-      repository: grafana/promtail
-      tag: "3.6.11"
+      repository: grafana/alloy
+      tag: "v1.22.0"
     resources:
       requests:
         cpu: 50m

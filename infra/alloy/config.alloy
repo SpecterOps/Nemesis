@@ -1,0 +1,97 @@
+// Container logs for Loki (--profile monitoring). Grafana Alloy replaces Promtail.
+//
+// Reads Docker's json-file logs from /var/lib/docker/containers instead of using the Docker API, so the Docker socket
+// (full control of the host) isn't mounted. The logging options shared by every service in compose.yaml add the
+// Compose project, service and container number to each line; lines without them (containers of other projects on
+// the same host) are dropped.
+//
+// Labels: container_name (e.g. nemesis-web-api-1), service_name (web-api, what Grafana's log drilldown groups by),
+// container_id and logstream (stdout/stderr) - the same labels Promtail set, plus service_name.
+
+local.file_match "containers" {
+	path_targets = [{"__path__" = "/var/lib/docker/containers/*/*-json.log"}]
+	sync_period  = "5s"
+}
+
+loki.source.file "containers" {
+	targets    = local.file_match.containers.targets
+	forward_to = [loki.process.containers.receiver]
+}
+
+loki.process "containers" {
+	// {"log": "<line>\n", "stream": "stdout", "attrs": {"com.docker.compose.service": "web-api", ...}, "time": "..."}
+	stage.json {
+		expressions = {
+			log       = "log",
+			logstream = "stream",
+			time      = "time",
+			project   = "attrs.\"com.docker.compose.project\"",
+			service   = "attrs.\"com.docker.compose.service\"",
+			number    = "attrs.\"com.docker.compose.container-number\"",
+		}
+	}
+
+	stage.labels {
+		values = {project = ""}
+	}
+
+	// Only this Compose project's containers
+	stage.match {
+		selector = "{project!=\"nemesis\"}"
+		action   = "drop"
+	}
+
+	stage.timestamp {
+		source = "time"
+		format = "RFC3339Nano"
+	}
+
+	stage.regex {
+		source     = "filename"
+		expression = "/var/lib/docker/containers/(?P<container_id>[0-9a-f]+)/"
+	}
+
+	stage.template {
+		source   = "container_name"
+		template = "{{ .project }}-{{ .service }}-{{ .number }}"
+	}
+
+	stage.labels {
+		values = {
+			container_name = "",
+			service_name   = "service",
+			container_id   = "",
+			logstream      = "",
+		}
+	}
+
+	stage.label_drop {
+		values = ["project", "filename"]
+	}
+
+	// The line itself, without Docker's wrapper; for JSON log lines, their "message" field (as with Promtail)
+	stage.output {
+		source = "log"
+	}
+
+	stage.replace {
+		expression = "(\\r?\\n)$"
+		replace    = ""
+	}
+
+	stage.json {
+		expressions = {message = "message"}
+	}
+
+	stage.output {
+		source = "message"
+	}
+
+	forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}
