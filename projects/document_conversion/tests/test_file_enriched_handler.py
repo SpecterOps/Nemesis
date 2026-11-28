@@ -17,12 +17,22 @@ _fake_workflow = types.ModuleType("document_conversion.workflow")
 _fake_workflow.document_conversion_workflow = MagicMock(name="document_conversion_workflow")  # pyright: ignore[reportAttributeAccessIssue]
 sys.modules.setdefault("document_conversion.workflow", _fake_workflow)
 
-import document_conversion.subscriptions.file_enriched as handler  # noqa: E402
+with patch("common.storage.StorageS3", MagicMock()):  # extract_text creates one at import
+    import document_conversion.subscriptions.file_enriched as handler  # noqa: E402
 import document_conversion.workflow_manager as wm  # noqa: E402
 
 
-def _file(magic_type: str):
-    return SimpleNamespace(object_id=uuid4(), magic_type=magic_type, path="/x/file")
+def _file(
+    magic_type: str, mime_type: str = "application/octet-stream", file_name: str = "file.bin", is_container=False
+):
+    return SimpleNamespace(
+        object_id=uuid4(),
+        magic_type=magic_type,
+        path="/x/file",
+        mime_type=mime_type,
+        file_name=file_name,
+        is_container=is_container,
+    )
 
 
 class _Storage:
@@ -136,4 +146,40 @@ async def test_handler_drops_missing_objects(monkeypatch, start):
     monkeypatch.setattr(handler, "_storage", lambda: _Storage(missing=True))
     # returns normally (ack) instead of raising, so the message isn't redelivered forever
     await handler.file_enriched_subscription_handler(SimpleNamespace(data=_file("PDF document")))  # pyright: ignore[reportArgumentType]
+    start.assert_not_awaited()
+
+
+# --- skipping files no workflow step applies to ---
+
+
+@pytest.mark.parametrize(
+    ("mime", "name"),
+    [("application/zip", "bundle.zip"), ("application/x-7z-compressed", "a.7z"), ("application/x-tar", "a.tar")],
+)
+def test_archives_have_no_conversion_work(mime, name):
+    assert handler.has_conversion_work(_file("archive", mime, name, is_container=True)) is False
+
+
+@pytest.mark.parametrize(
+    ("mime", "name", "container"),
+    [
+        ("application/x-pie-executable", "ls", False),  # strings
+        ("application/octet-stream", "blob.bin", False),  # strings
+        ("application/zip", "report.docx", True),  # an OOXML file typed as zip: PDF conversion by extension
+    ],
+)
+def test_other_files_have_conversion_work(mime, name, container):
+    assert handler.has_conversion_work(_file("x", mime, name, is_container=container)) is True
+
+
+def test_a_container_tika_can_read_has_conversion_work(monkeypatch):
+    monkeypatch.setattr(handler, "can_extract_plaintext", lambda mime: mime == "application/vnd.ms-cab")
+    assert handler.has_conversion_work(_file("x", "application/vnd.ms-cab", "a.cab", is_container=True)) is True
+
+
+@pytest.mark.asyncio
+async def test_handler_skips_archives_without_checking_or_starting(monkeypatch, start):
+    monkeypatch.setattr(handler, "is_encrypted_file", lambda f: pytest.fail("no encryption check expected"))
+    f = _file("Zip archive data", "application/zip", "bundle.zip", is_container=True)
+    await handler.file_enriched_subscription_handler(SimpleNamespace(data=f))  # pyright: ignore[reportArgumentType]
     start.assert_not_awaited()

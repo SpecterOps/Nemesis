@@ -5,10 +5,13 @@ import re
 from functools import cache
 
 import fitz  # PyMuPDF
+from common.helpers import can_convert_to_pdf
 from common.logger import get_logger
 from common.models import CloudEvent, FileEnriched
 from common.storage import StorageS3
 from minio.error import S3Error
+
+from ..activities.extract_text import can_extract_plaintext
 
 logger = get_logger(__name__)
 
@@ -27,6 +30,17 @@ def _storage() -> StorageS3:
 def _may_be_protected(magic_type: str) -> bool:
     magic = (magic_type or "").lower()
     return not magic or _MAYBE_PROTECTED.search(magic) is not None
+
+
+def has_conversion_work(file_data: FileEnriched) -> bool:
+    """Whether any workflow step applies, by the steps' own checks: strings (anything but a container), text
+    extraction (a Tika type) or PDF conversion (a convertible extension). An archive matches none of them; its
+    extracted files arrive as files of their own."""
+    return (
+        not file_data.is_container
+        or can_extract_plaintext(file_data.mime_type)
+        or can_convert_to_pdf(file_data.file_name)
+    )
 
 
 def is_pdf_encrypted(pdf_path):
@@ -110,6 +124,14 @@ async def file_enriched_subscription_handler(event: CloudEvent[FileEnriched]):
 
     try:
         logger.debug("Received file_enriched event", object_id=file_enriched.object_id)
+
+        if not has_conversion_work(file_enriched):
+            logger.debug(
+                "Skipping document_conversion_workflow - no step applies to this file type",
+                object_id=file_enriched.object_id,
+                mime_type=file_enriched.mime_type,
+            )
+            return
 
         # If the file is encrypted, skip
         if await asyncio.to_thread(is_encrypted_file, file_enriched):
