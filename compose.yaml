@@ -840,6 +840,11 @@ services:
     command:
       # - "--log.level=DEBUG"
       - "--log.level=WARN"
+      # Access log (JSON, to stdout; promtail ships it to Loki with --monitoring): who requested what, and failed
+      # logins (401). Request headers are dropped by default, so the Authorization header is never logged.
+      - "--accesslog=true"
+      - "--accesslog.format=json"
+      - "--accesslog.fields.headers.defaultmode=drop"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       # Only route this Compose project's containers, not other stacks on the same Docker host
